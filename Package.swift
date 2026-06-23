@@ -13,7 +13,11 @@ let package = Package(
         .executableTarget(
             name: "SimpleGit",
             path: "Sources/SimpleGit",
-            resources: [.copy("Resources/AppIcon.png")]
+            resources: [
+                .copy("Resources/AppIcon.png"),
+                .copy("Resources/codex.png"),
+                .copy("Resources/claude.png")
+            ]
         )
     ]
 )

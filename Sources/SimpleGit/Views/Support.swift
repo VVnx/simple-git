@@ -1,4 +1,20 @@
 import SwiftUI
+import AppKit
+
+/// Brand glyphs for the external-app buttons, bundled as resources and flagged as
+/// template images so they follow the control's foreground color (and dark mode),
+/// exactly like the SF Symbols they replaced.
+enum ToolGlyph {
+    static let codex = template("codex")
+    static let claude = template("claude")
+
+    private static func template(_ name: String) -> NSImage? {
+        guard let url = Bundle.module.url(forResource: name, withExtension: "png"),
+              let image = NSImage(contentsOf: url) else { return nil }
+        image.isTemplate = true
+        return image
+    }
+}
 
 // MARK: - Relative date formatting
 
@@ -127,12 +143,20 @@ struct StatusBarView: View {
                 HStack(spacing: 8) {
                     if let onOpenCodex {
                         Button(action: onOpenCodex) {
-                            Label("Codex", systemImage: "chevron.left.forwardslash.chevron.right")
+                            Label {
+                                Text("Codex")
+                            } icon: {
+                                glyph(ToolGlyph.codex, fallback: "chevron.left.forwardslash.chevron.right")
+                            }
                         }
                     }
                     if let onOpenClaude {
                         Button(action: onOpenClaude) {
-                            Label("Claude", systemImage: "sparkles")
+                            Label {
+                                Text("Claude")
+                            } icon: {
+                                glyph(ToolGlyph.claude, fallback: "sparkles")
+                            }
                         }
                     }
                 }
@@ -144,5 +168,19 @@ struct StatusBarView: View {
         .padding(.horizontal, 12)
         .frame(height: 30)
         .background(.bar)
+    }
+
+    /// A bundled template glyph sized to sit next to the small button labels,
+    /// falling back to an SF Symbol if the resource is missing.
+    @ViewBuilder
+    private func glyph(_ image: NSImage?, fallback: String) -> some View {
+        if let image {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 14, height: 14)
+        } else {
+            Image(systemName: fallback)
+        }
     }
 }
