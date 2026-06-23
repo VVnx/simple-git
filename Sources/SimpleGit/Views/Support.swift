@@ -1,17 +1,19 @@
 import SwiftUI
 import AppKit
 
-/// Brand glyphs for the external-app buttons, bundled as resources and flagged as
-/// template images so they follow the control's foreground color (and dark mode),
-/// exactly like the SF Symbols they replaced.
+/// Brand glyphs for the external-app buttons, bundled as resources. OpenAI's mark
+/// has no brand color, so it is flagged as a template image that follows the
+/// control's foreground (staying visible in light and dark); Claude and VS Code
+/// keep their own brand colors.
 enum ToolGlyph {
-    static let codex = template("codex")
-    static let claude = template("claude")
+    static let codex = load("codex", template: true)
+    static let claude = load("claude", template: false)
+    static let vscode = load("vscode", template: false)
 
-    private static func template(_ name: String) -> NSImage? {
+    private static func load(_ name: String, template: Bool) -> NSImage? {
         guard let url = Bundle.module.url(forResource: name, withExtension: "png"),
               let image = NSImage(contentsOf: url) else { return nil }
-        image.isTemplate = true
+        image.isTemplate = template
         return image
     }
 }
@@ -109,6 +111,7 @@ struct StatusBarView: View {
     let busy: String?
     var onOpenCodex: (() -> Void)? = nil
     var onOpenClaude: (() -> Void)? = nil
+    var onOpenVSCode: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 14) {
@@ -139,7 +142,7 @@ struct StatusBarView: View {
                 }
             }
 
-            if onOpenCodex != nil || onOpenClaude != nil {
+            if onOpenCodex != nil || onOpenClaude != nil || onOpenVSCode != nil {
                 HStack(spacing: 8) {
                     if let onOpenCodex {
                         Button(action: onOpenCodex) {
@@ -156,6 +159,15 @@ struct StatusBarView: View {
                                 Text("Claude")
                             } icon: {
                                 glyph(ToolGlyph.claude, fallback: "sparkles")
+                            }
+                        }
+                    }
+                    if let onOpenVSCode {
+                        Button(action: onOpenVSCode) {
+                            Label {
+                                Text("VS Code")
+                            } icon: {
+                                glyph(ToolGlyph.vscode, fallback: "curlybraces")
                             }
                         }
                     }

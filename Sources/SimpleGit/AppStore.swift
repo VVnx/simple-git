@@ -239,12 +239,15 @@ final class AppStore: ObservableObject {
         flashSuccess("已复制 hash \(commit.shortHash)")
     }
 
-    /// Launches an external app (Codex / Claude) via `open -a`.
-    func openExternalApp(_ appName: String) {
+    /// Launches an external app via `open -a`, optionally opening `path` with it
+    /// (e.g. opening the current repo folder in VS Code).
+    func openExternalApp(_ appName: String, path: String? = nil) {
         Task.detached {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            process.arguments = ["-a", appName]
+            var args = ["-a", appName]
+            if let path { args.append(path) }
+            process.arguments = args
             try? process.run()
         }
     }

@@ -16,7 +16,8 @@ let package = Package(
             resources: [
                 .copy("Resources/AppIcon.png"),
                 .copy("Resources/codex.png"),
-                .copy("Resources/claude.png")
+                .copy("Resources/claude.png"),
+                .copy("Resources/vscode.png")
             ]
         )
     ]

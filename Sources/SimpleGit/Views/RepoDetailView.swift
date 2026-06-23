@@ -31,7 +31,8 @@ struct RepoDetailView: View {
                         status: store.status,
                         busy: store.busyMessage,
                         onOpenCodex: { store.openExternalApp("Codex") },
-                        onOpenClaude: { store.openExternalApp("Claude") }
+                        onOpenClaude: { store.openExternalApp("Claude") },
+                        onOpenVSCode: { store.openExternalApp("Visual Studio Code", path: store.selectedRepo?.path) }
                     )
                 }
                 .animation(.easeInOut(duration: 0.2), value: store.selection)
