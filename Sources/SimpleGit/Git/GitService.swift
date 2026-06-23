@@ -38,6 +38,11 @@ struct GitService {
         }
     }
 
+    /// Clones `url` into `destination` (which must not yet exist).
+    static func clone(url: String, into destination: String) async throws {
+        _ = try await GitRunner.run(["clone", url, destination], in: nil)
+    }
+
     // MARK: Reads
 
     func log(limit: Int) async throws -> [Commit] {
@@ -113,6 +118,22 @@ struct GitService {
     func remotes() async throws -> [String] {
         let out = try await runner.run(["remote"])
         return out.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+    }
+
+    /// Files changed by a commit. For a normal/root commit this is the diff vs its
+    /// parent (or the whole tree for the root); for a merge it's the net change vs
+    /// the first parent.
+    func changedFiles(of commit: Commit) async throws -> [ChangedFile] {
+        var args = ["diff-tree", "-r", "-M", "--name-status", "--no-commit-id"]
+        if commit.parents.count > 1 {
+            args += [commit.parents[0], commit.hash]
+        } else {
+            args += ["--root", commit.hash]
+        }
+        let out = try await runner.run(args)
+        return out
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .compactMap { ChangedFile(statusLine: String($0)) }
     }
 
     // MARK: Parsing

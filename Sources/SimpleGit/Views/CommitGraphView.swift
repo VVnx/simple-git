@@ -28,6 +28,9 @@ struct CommitGraphView: View {
     let refsByCommit: [String: [Ref]]
     let currentBranch: String?
     let now: Date
+    let selectedHash: String?
+    let onSelect: (Commit) -> Void
+    let onCopyHash: (Commit) -> Void
 
     var body: some View {
         ScrollView(.vertical) {
@@ -38,7 +41,10 @@ struct CommitGraphView: View {
                         laneCount: laneCount,
                         refs: refsByCommit[node.commit.hash] ?? [],
                         currentBranch: currentBranch,
-                        now: now
+                        now: now,
+                        isSelected: node.commit.hash == selectedHash,
+                        onSelect: { onSelect(node.commit) },
+                        onCopyHash: { onCopyHash(node.commit) }
                     )
                     Divider().opacity(0.2)
                 }
@@ -56,6 +62,9 @@ struct CommitRowView: View {
     let refs: [Ref]
     let currentBranch: String?
     let now: Date
+    let isSelected: Bool
+    let onSelect: () -> Void
+    let onCopyHash: () -> Void
 
     static let rowHeight: CGFloat = 32
     static let laneSpacing: CGFloat = 16
@@ -81,23 +90,37 @@ struct CommitRowView: View {
 
                 Spacer(minLength: 8)
 
-                Text(node.commit.authorName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(node.commit.authorName)
+                        .foregroundStyle(.secondary)
+                    Text(node.commit.authorEmail)
+                        .foregroundStyle(.tertiary)
+                }
+                .font(.caption)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 260, alignment: .trailing)
+
                 Text(RelativeDate.string(from: node.commit.date, now: now))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(width: 78, alignment: .trailing)
-                Text(node.commit.shortHash)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.tertiary)
+
+                Button(action: onCopyHash) {
+                    Text(node.commit.shortHash)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.blue)
+                }
+                .buttonStyle(.plain)
+                .help("点击复制完整 hash")
             }
             .padding(.trailing, 12)
         }
         .frame(height: Self.rowHeight)
+        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
         .contentShape(Rectangle())
-        .help("\(node.commit.shortHash) · \(node.commit.authorName) · \(RelativeDate.absoluteString(from: node.commit.date))\n\(node.commit.subject)")
+        .onTapGesture { onSelect() }
+        .help("\(node.commit.shortHash) · \(node.commit.authorName) <\(node.commit.authorEmail)> · \(RelativeDate.absoluteString(from: node.commit.date))\n\(node.commit.subject)")
     }
 
     private func x(_ column: Int) -> CGFloat {

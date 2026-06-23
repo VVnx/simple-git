@@ -88,3 +88,29 @@ struct GraphLayoutResult {
     let nodes: [CommitNode]
     let laneCount: Int
 }
+
+// MARK: - Changed file (commit detail)
+
+struct ChangedFile: Identifiable {
+    let status: String      // raw git status: "A", "M", "D", "T", "R100", "C75"…
+    let path: String
+    let oldPath: String?    // present for renames / copies
+
+    var id: String { "\(status)|\(oldPath ?? "")|\(path)" }
+
+    /// Parses one tab-separated line of `git diff-tree --name-status` output.
+    init?(statusLine line: String) {
+        let parts = line.components(separatedBy: "\t").filter { !$0.isEmpty }
+        guard parts.count >= 2 else { return nil }
+        let status = parts[0]
+        if (status.hasPrefix("R") || status.hasPrefix("C")), parts.count >= 3 {
+            self.status = status
+            self.oldPath = parts[1]
+            self.path = parts[2]
+        } else {
+            self.status = status
+            self.oldPath = nil
+            self.path = parts[1]
+        }
+    }
+}

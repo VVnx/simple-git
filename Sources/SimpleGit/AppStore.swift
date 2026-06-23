@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 
 @MainActor
 final class AppStore: ObservableObject {
@@ -21,6 +22,12 @@ final class AppStore: ObservableObject {
     /// Transient success banner ("Push 成功" …); auto-clears after a few seconds.
     @Published var successMessage: String?
     private var successClearTask: Task<Void, Never>?
+
+    // Selected commit & its changed files (bottom detail panel)
+    @Published var selectedCommitID: String?
+    @Published private(set) var changedFiles: [ChangedFile] = []
+    @Published private(set) var isLoadingFiles = false
+    private var filesGeneration = 0
 
     /// Ticks once a minute so relative timestamps in the graph stay fresh.
     @Published private(set) var now = Date()
@@ -47,6 +54,13 @@ final class AppStore: ObservableObject {
     /// Branches the user can merge into the current one (everything but HEAD).
     var mergeableBranches: [Branch] {
         branches.filter { !$0.isCurrent && $0.name != status?.branch }
+    }
+
+    /// The currently inspected commit, resolved against the loaded graph so it
+    /// drops automatically if a reload no longer contains it.
+    var selectedCommit: Commit? {
+        guard let id = selectedCommitID else { return nil }
+        return nodes.first { $0.commit.hash == id }?.commit
     }
 
     // MARK: - Persistence
@@ -84,6 +98,39 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// Clones a remote repo into `parent`/<derived-name> and adds it. Throws so the
+    /// clone sheet can show progress and surface failures inline.
+    func cloneRepository(url: String, into parent: URL) async throws {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw SimpleGitError("请输入仓库 URL。") }
+        let name = Self.deriveRepoName(from: trimmed)
+        guard !name.isEmpty else { throw SimpleGitError("无法从 URL 解析仓库名。") }
+        let dest = parent.appendingPathComponent(name)
+        if FileManager.default.fileExists(atPath: dest.path) {
+            throw SimpleGitError("目标目录已存在:\(dest.path)")
+        }
+        try await GitService.clone(url: trimmed, into: dest.path)
+        let root = try await GitService.repoRoot(of: dest.path)
+        let repo = Repository(name: URL(fileURLWithPath: root).lastPathComponent, path: root)
+        if !repositories.contains(where: { $0.id == repo.id }) {
+            repositories.append(repo)
+            persist()
+        }
+        select(repo.id)
+        flashSuccess("克隆完成:\(name)")
+    }
+
+    /// Best-effort repo name from a clone URL: "git@host:user/repo.git" → "repo".
+    static func deriveRepoName(from url: String) -> String {
+        var s = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasSuffix("/") { s = String(s.dropLast()) }
+        if s.hasSuffix(".git") { s = String(s.dropLast(4)) }
+        if let idx = s.lastIndex(where: { $0 == "/" || $0 == ":" }) {
+            s = String(s[s.index(after: idx)...])
+        }
+        return s
+    }
+
     func removeRepository(_ repo: Repository) {
         repositories.removeAll { $0.id == repo.id }
         persist()
@@ -94,7 +141,35 @@ final class AppStore: ObservableObject {
 
     func select(_ id: Repository.ID?) {
         selectedRepoID = id
+        selectCommit(nil)
         reload()
+    }
+
+    // MARK: - Commit inspection
+
+    func selectCommit(_ commit: Commit?) {
+        selectedCommitID = commit?.hash
+        changedFiles = []
+        filesGeneration += 1
+        guard let commit, let repo = selectedRepo else {
+            isLoadingFiles = false
+            return
+        }
+        let generation = filesGeneration
+        let service = GitService(path: repo.path)
+        isLoadingFiles = true
+        Task {
+            let files = (try? await service.changedFiles(of: commit)) ?? []
+            guard generation == filesGeneration else { return }
+            changedFiles = files
+            isLoadingFiles = false
+        }
+    }
+
+    func copyCommitHash(_ commit: Commit) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(commit.hash, forType: .string)
+        flashSuccess("已复制 hash \(commit.shortHash)")
     }
 
     // MARK: - Loading

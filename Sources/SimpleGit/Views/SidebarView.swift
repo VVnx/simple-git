@@ -3,6 +3,7 @@ import AppKit
 
 struct SidebarView: View {
     @EnvironmentObject var store: AppStore
+    @State private var showCloneSheet = false
 
     var body: some View {
         List(selection: selectionBinding) {
@@ -29,12 +30,27 @@ struct SidebarView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            Button(action: addRepo) {
+            Menu {
+                Button {
+                    addLocalRepo()
+                } label: {
+                    Label("打开本地仓库…", systemImage: "folder")
+                }
+                Button {
+                    showCloneSheet = true
+                } label: {
+                    Label("克隆 URL…", systemImage: "arrow.down.circle")
+                }
+            } label: {
                 Label("添加仓库", systemImage: "plus")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.borderless)
+            .menuStyle(.borderlessButton)
             .padding(10)
+        }
+        .sheet(isPresented: $showCloneSheet) {
+            CloneSheet()
+                .environmentObject(store)
         }
     }
 
@@ -45,7 +61,7 @@ struct SidebarView: View {
         )
     }
 
-    private func addRepo() {
+    private func addLocalRepo() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false

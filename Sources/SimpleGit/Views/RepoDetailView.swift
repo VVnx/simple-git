@@ -14,9 +14,22 @@ struct RepoDetailView: View {
             } else {
                 VStack(spacing: 0) {
                     graph
+                    if let commit = store.selectedCommit {
+                        Divider()
+                        CommitDetailPanel(
+                            commit: commit,
+                            files: store.changedFiles,
+                            isLoading: store.isLoadingFiles,
+                            onClose: { store.selectCommit(nil) },
+                            onCopyHash: { store.copyCommitHash(commit) }
+                        )
+                        .frame(height: 220)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                     Divider()
                     StatusBarView(status: store.status, busy: store.busyMessage)
                 }
+                .animation(.easeInOut(duration: 0.2), value: store.selectedCommitID)
             }
         }
         .overlay(alignment: .top) {
@@ -47,7 +60,10 @@ struct RepoDetailView: View {
                 laneCount: store.laneCount,
                 refsByCommit: store.refsByCommit,
                 currentBranch: store.status?.branch,
-                now: store.now
+                now: store.now,
+                selectedHash: store.selectedCommitID,
+                onSelect: { store.selectCommit($0) },
+                onCopyHash: { store.copyCommitHash($0) }
             )
         }
     }
