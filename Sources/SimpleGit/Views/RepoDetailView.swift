@@ -30,6 +30,7 @@ struct RepoDetailView: View {
                     StatusBarView(
                         status: store.status,
                         busy: store.busyMessage,
+                        onTapBranch: { store.locateCurrentHead() },
                         onOpenCodex: { store.openExternalApp("Codex") },
                         onOpenClaude: { store.openExternalApp("Claude") },
                         onOpenVSCode: { store.openExternalApp("Visual Studio Code", path: store.selectedRepo?.path) }
@@ -84,7 +85,8 @@ struct RepoDetailView: View {
                 onCopyHash: { store.copyCommitHash($0) },
                 uncommittedCount: store.status.map { $0.changedCount + $0.untrackedCount } ?? 0,
                 isUncommittedSelected: store.isUncommittedSelected,
-                onSelectUncommitted: { store.selectUncommitted() }
+                onSelectUncommitted: { store.selectUncommitted() },
+                scrollTarget: store.scrollTarget
             )
         }
     }

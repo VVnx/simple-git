@@ -109,6 +109,7 @@ struct ToastView: View {
 struct StatusBarView: View {
     let status: RepoStatus?
     let busy: String?
+    var onTapBranch: (() -> Void)? = nil
     var onOpenCodex: (() -> Void)? = nil
     var onOpenClaude: (() -> Void)? = nil
     var onOpenVSCode: (() -> Void)? = nil
@@ -116,8 +117,14 @@ struct StatusBarView: View {
     var body: some View {
         HStack(spacing: 14) {
             if let status {
-                Label(status.branch, systemImage: status.detached ? "scissors" : "arrow.triangle.branch")
-                    .font(.callout.weight(.medium))
+                Button {
+                    onTapBranch?()
+                } label: {
+                    Label(status.branch, systemImage: status.detached ? "scissors" : "arrow.triangle.branch")
+                        .font(.callout.weight(.medium))
+                }
+                .buttonStyle(.plain)
+                .help("跳到当前分支最新提交")
 
                 if status.upstream != nil {
                     HStack(spacing: 6) {

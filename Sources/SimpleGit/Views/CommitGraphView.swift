@@ -89,36 +89,45 @@ struct CommitGraphView: View {
     let uncommittedCount: Int
     let isUncommittedSelected: Bool
     let onSelectUncommitted: () -> Void
+    let scrollTarget: AppStore.ScrollTarget?
 
     var body: some View {
-        ScrollView(.vertical) {
-            LazyVStack(spacing: 0) {
-                ForEach(nodes) { node in
-                    if node.commit.isUncommitted {
-                        UncommittedRowView(
-                            node: node,
-                            laneCount: laneCount,
-                            count: uncommittedCount,
-                            isSelected: isUncommittedSelected,
-                            onSelect: onSelectUncommitted
-                        )
-                    } else {
-                        CommitRowView(
-                            node: node,
-                            laneCount: laneCount,
-                            refs: refsByCommit[node.commit.hash] ?? [],
-                            currentBranch: currentBranch,
-                            now: now,
-                            isSelected: node.commit.hash == selectedHash,
-                            onSelect: { onSelect(node.commit) },
-                            onCopyHash: { onCopyHash(node.commit) }
-                        )
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                LazyVStack(spacing: 0) {
+                    ForEach(nodes) { node in
+                        if node.commit.isUncommitted {
+                            UncommittedRowView(
+                                node: node,
+                                laneCount: laneCount,
+                                count: uncommittedCount,
+                                isSelected: isUncommittedSelected,
+                                onSelect: onSelectUncommitted
+                            )
+                        } else {
+                            CommitRowView(
+                                node: node,
+                                laneCount: laneCount,
+                                refs: refsByCommit[node.commit.hash] ?? [],
+                                currentBranch: currentBranch,
+                                now: now,
+                                isSelected: node.commit.hash == selectedHash,
+                                onSelect: { onSelect(node.commit) },
+                                onCopyHash: { onCopyHash(node.commit) }
+                            )
+                        }
+                        Divider().opacity(0.2)
                     }
-                    Divider().opacity(0.2)
+                }
+            }
+            .background(Color(nsColor: .textBackgroundColor))
+            .onChange(of: scrollTarget) { target in
+                guard let target else { return }
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    proxy.scrollTo(target.hash, anchor: .center)
                 }
             }
         }
-        .background(Color(nsColor: .textBackgroundColor))
     }
 }
 

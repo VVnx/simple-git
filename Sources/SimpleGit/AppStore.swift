@@ -36,6 +36,12 @@ final class AppStore: ObservableObject {
     @Published private(set) var isLoadingDiff = false
     private var diffGeneration = 0
 
+    /// One-shot request for the graph to scroll to a commit. The token makes a
+    /// repeated tap re-fire even when the target hash hasn't changed.
+    struct ScrollTarget: Equatable { let hash: String; let token: Int }
+    @Published private(set) var scrollTarget: ScrollTarget?
+    private var scrollToken = 0
+
     /// Ticks once a minute so relative timestamps in the graph stay fresh.
     @Published private(set) var now = Date()
     private var clockTimer: Timer?
@@ -187,6 +193,16 @@ final class AppStore: ObservableObject {
             workingFiles = files
             isLoadingFiles = false
         }
+    }
+
+    /// Scrolls the graph to — and selects — the tip of the current branch (HEAD).
+    /// No-op on an unborn branch or if HEAD isn't in the loaded window.
+    func locateCurrentHead() {
+        guard let oid = status?.oid, oid != "(initial)",
+              let node = nodes.first(where: { $0.commit.hash == oid }) else { return }
+        selectCommit(node.commit)
+        scrollToken += 1
+        scrollTarget = ScrollTarget(hash: oid, token: scrollToken)
     }
 
     func clearSelection() {
