@@ -159,6 +159,13 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// Toggles name masking for a repo and persists it.
+    func toggleMask(_ repo: Repository) {
+        guard let idx = repositories.firstIndex(where: { $0.id == repo.id }) else { return }
+        repositories[idx].masked.toggle()
+        persist()
+    }
+
     func select(_ id: Repository.ID?) {
         selectedRepoID = id
         clearSelection()
@@ -391,7 +398,7 @@ final class AppStore: ObservableObject {
         if !FileManager.default.fileExists(atPath: repo.path) {
             return "仓库路径不存在或已被移动:\n\(repo.path)"
         }
-        return "无法读取仓库「\(repo.name)」:\n\(error.localizedDescription)"
+        return "无法读取仓库「\(repo.displayName)」:\n\(error.localizedDescription)"
     }
 
     // MARK: - Actions

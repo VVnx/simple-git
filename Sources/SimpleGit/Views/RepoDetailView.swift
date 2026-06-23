@@ -65,7 +65,7 @@ struct RepoDetailView: View {
         } message: { commit in
             Text("把提交 \(commit.shortHash)(\(commit.subject))合并到当前分支 “\(store.status?.branch ?? "")” 吗?")
         }
-        .navigationTitle(store.selectedRepo?.name ?? "simple-git")
+        .navigationTitle(store.selectedRepo?.displayName ?? "simple-git")
         .navigationSubtitle(store.status?.branch ?? "")
     }
 

@@ -14,7 +14,35 @@ struct SimpleGitError: LocalizedError {
 struct Repository: Identifiable, Codable, Hashable {
     var name: String
     var path: String
+    /// When true, the name is shown masked in the UI (privacy / screenshots).
+    var masked: Bool = false
+
     var id: String { path }
+
+    /// Name as shown in the list — masked to first+•••+last when `masked` is on.
+    /// Fixed dot count so the real length isn't revealed.
+    var displayName: String { masked ? Self.maskName(name) : name }
+
+    static func maskName(_ name: String) -> String {
+        let chars = Array(name)
+        guard chars.count > 2 else { return chars.isEmpty ? "" : "\(chars[0])•••" }
+        return "\(chars.first!)•••\(chars.last!)"
+    }
+
+    init(name: String, path: String, masked: Bool = false) {
+        self.name = name
+        self.path = path
+        self.masked = masked
+    }
+
+    // Decode tolerantly so repos persisted before `masked` existed still load.
+    enum CodingKeys: String, CodingKey { case name, path, masked }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        path = try c.decode(String.self, forKey: .path)
+        masked = try c.decodeIfPresent(Bool.self, forKey: .masked) ?? false
+    }
 }
 
 // MARK: - Commit & refs
