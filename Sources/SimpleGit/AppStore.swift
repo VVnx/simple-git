@@ -435,7 +435,7 @@ final class AppStore: ObservableObject {
                 try await op(service)
                 succeeded = true
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = Self.friendlyGitMessage(error)
             }
             // Always refresh afterwards — even on failure — so a half-applied
             // action (e.g. a conflicted merge that left the tree MERGING) shows
@@ -447,6 +447,42 @@ final class AppStore: ObservableObject {
             busyMessage = nil
             if succeeded { flashSuccess(success) }
         }
+    }
+
+    /// Maps raw `git` stderr into a short, actionable Chinese message for the
+    /// error alert. Falls back to the raw text with git's verbose `hint:` noise
+    /// stripped, so even unrecognized errors read more cleanly.
+    static func friendlyGitMessage(_ error: Error) -> String {
+        if let simple = error as? SimpleGitError { return simple.message }
+        let raw = (error as? GitError)?.message ?? error.localizedDescription
+        let lower = raw.lowercased()
+
+        if lower.contains("fetch first") || lower.contains("non-fast-forward")
+            || (lower.contains("rejected") && lower.contains("remote contains work")) {
+            return "推送被拒绝:远端有你本地还没有的提交。请先 Pull 拉取合并,再 Push。"
+        }
+        if lower.contains("permission denied") || lower.contains("authentication failed")
+            || lower.contains("could not read from remote") {
+            return "无法访问远程仓库:认证失败或没有权限。\n检查 SSH key 是否已加到 GitHub,以及对该仓库的访问权限。"
+        }
+        if lower.contains("conflict") || lower.contains("automatic merge failed") {
+            return "合并有冲突:需要手动解决。\n请到命令行处理冲突后,再回到 app 刷新。"
+        }
+        if lower.contains("divergent branches") || lower.contains("need to specify how to reconcile") {
+            return "本地与远端已分叉:需要先合并或变基。可先点 Pull 再试。"
+        }
+        if lower.contains("couldn't find remote ref") || lower.contains("no configured push destination")
+            || lower.contains("does not appear to be a git repository") {
+            return "找不到远程仓库或对应分支,检查 remote 配置是否正确。"
+        }
+
+        // Fallback: drop git's verbose "hint:" lines, keep the real error.
+        let core = raw
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .filter { !$0.lowercased().hasPrefix("hint:") }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return core.isEmpty ? raw : core
     }
 
     /// Shows a transient success banner that fades out on its own.
