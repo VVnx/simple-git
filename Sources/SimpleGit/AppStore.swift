@@ -18,6 +18,9 @@ final class AppStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var busyMessage: String?
     @Published var errorMessage: String?
+    /// Transient success banner ("Push 成功" …); auto-clears after a few seconds.
+    @Published var successMessage: String?
+    private var successClearTask: Task<Void, Never>?
 
     /// Ticks once a minute so relative timestamps in the graph stay fresh.
     @Published private(set) var now = Date()
@@ -172,12 +175,12 @@ final class AppStore: ObservableObject {
 
     // MARK: - Actions
 
-    func fetch() { perform("正在 Fetch…") { try await $0.fetch() } }
+    func fetch() { perform("正在 Fetch…", success: "Fetch 完成") { try await $0.fetch() } }
 
     func push() {
         // Capture status on the main actor before handing work to the background.
         let current = status
-        perform("正在 Push…") { service in
+        perform("正在 Push…", success: "Push 成功") { service in
             if let current, current.upstream == nil, !current.detached {
                 // No upstream yet — set one against the repo's remote so a freshly
                 // created branch pushes without the user typing a command.
@@ -193,17 +196,19 @@ final class AppStore: ObservableObject {
     }
 
     func merge(_ branch: Branch) {
-        perform("正在 Merge \(branch.name)…") { try await $0.merge(branch.name) }
+        perform("正在 Merge \(branch.name)…", success: "已合并 \(branch.name)") { try await $0.merge(branch.name) }
     }
 
-    private func perform(_ message: String, _ op: @escaping (GitService) async throws -> Void) {
+    private func perform(_ message: String, success: String, _ op: @escaping (GitService) async throws -> Void) {
         guard let repo = selectedRepo else { return }
         let service = GitService(path: repo.path)
         Task {
             busyMessage = message
-            defer { busyMessage = nil }
+            successMessage = nil
+            var succeeded = false
             do {
                 try await op(service)
+                succeeded = true
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -213,6 +218,20 @@ final class AppStore: ObservableObject {
             loadGeneration += 1
             let generation = loadGeneration
             await load(repo: repo, generation: generation)
+
+            busyMessage = nil
+            if succeeded { flashSuccess(success) }
+        }
+    }
+
+    /// Shows a transient success banner that fades out on its own.
+    private func flashSuccess(_ text: String) {
+        successClearTask?.cancel()
+        successMessage = text
+        successClearTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.successMessage = nil
         }
     }
 

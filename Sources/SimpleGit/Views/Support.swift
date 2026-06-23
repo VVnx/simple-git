@@ -66,6 +66,26 @@ struct EmptyStateView: View {
     }
 }
 
+// MARK: - Success toast
+
+struct ToastView: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            Text(text)
+                .font(.callout.weight(.medium))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.green.opacity(0.35), lineWidth: 1))
+        .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+    }
+}
+
 // MARK: - Status bar
 
 struct StatusBarView: View {

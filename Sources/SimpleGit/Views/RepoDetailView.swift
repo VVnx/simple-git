@@ -19,6 +19,15 @@ struct RepoDetailView: View {
                 }
             }
         }
+        .overlay(alignment: .top) {
+            if let success = store.successMessage {
+                ToastView(text: success)
+                    .padding(.top, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(1)
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: store.successMessage)
         .toolbar { toolbarContent }
         .navigationTitle(store.selectedRepo?.name ?? "simple-git")
         .navigationSubtitle(store.status?.branch ?? "")
