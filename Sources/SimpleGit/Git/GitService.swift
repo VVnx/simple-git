@@ -203,11 +203,26 @@ struct GitService {
         return String(out.drop(while: { $0 == "\n" }))
     }
 
+    /// Largest untracked file we'll render in full as a diff. Above this, showing
+    /// the whole content as additions would mean reading (and coloring) megabytes
+    /// of text — almost always a vendored blob (node_modules, build output) the
+    /// user doesn't actually want to inspect here.
+    private static let maxUntrackedPreviewBytes = 2_000_000
+
     /// Unified diff of one file in the working tree (HEAD → working copy). Falls
     /// back to showing a brand-new untracked file's contents as additions.
     func workingFileDiff(path: String) async throws -> String {
         let tracked = try await runner.run(["-c", "core.quotePath=false", "diff", "HEAD", "-M", "--", path])
         if !tracked.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return tracked }
+
+        // Untracked (or unchanged-vs-HEAD) file: `--no-index` emits its entire
+        // content as additions. Skip the preview for very large files so a big
+        // vendored blob can't flood the diff view.
+        let full = (self.path as NSString).appendingPathComponent(path)
+        if let size = try? FileManager.default.attributesOfItem(atPath: full)[.size] as? Int,
+           size > Self.maxUntrackedPreviewBytes {
+            return "diff --git a/\(path) b/\(path)\n@@ 文件较大(约 \(size / 1024) KB),已跳过预览 @@\n这是一个未跟踪的大文件,完整内容请用编辑器打开。"
+        }
         return try await runner.run(["-c", "core.quotePath=false", "diff", "--no-index", "--", "/dev/null", path], allowNonZero: true)
     }
 
