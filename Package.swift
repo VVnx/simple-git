@@ -12,7 +12,8 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "SimpleGit",
-            path: "Sources/SimpleGit"
+            path: "Sources/SimpleGit",
+            resources: [.copy("Resources/AppIcon.png")]
         )
     ]
 )

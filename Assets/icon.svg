@@ -1,0 +1,38 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- simple-git app icon. Same family as simple-usage: 824 squircle on a 1024 canvas,
+       vertical gradient, white motif. Motif here is a git commit graph: a trunk with a
+       branch that forks off and merges back; nodes are punched-out rings. -->
+  <defs>
+    <linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="512" y1="100" x2="512" y2="924">
+      <stop offset="0" stop-color="#5E9BF7"/>
+      <stop offset="1" stop-color="#3D55D6"/>
+    </linearGradient>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#16245F" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <!-- squircle background -->
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#bg)"/>
+
+  <!-- white git graph (trunk + fork/merge branch) -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="50" stroke-linecap="round" filter="url(#shadow)">
+    <!-- trunk -->
+    <path d="M424 336 V688"/>
+    <!-- branch: forks at the top node, one commit on the right, merges at the bottom node -->
+    <path d="M424 336 C 568 336 648 420 648 512 C 648 604 568 688 424 688"/>
+  </g>
+
+  <!-- commit nodes drawn as white rings (white disc + gradient core punched through) -->
+  <g>
+    <circle cx="424" cy="336" r="76" fill="#FFFFFF" filter="url(#shadow)"/>
+    <circle cx="424" cy="512" r="76" fill="#FFFFFF" filter="url(#shadow)"/>
+    <circle cx="424" cy="688" r="76" fill="#FFFFFF" filter="url(#shadow)"/>
+    <circle cx="648" cy="512" r="76" fill="#FFFFFF" filter="url(#shadow)"/>
+
+    <circle cx="424" cy="336" r="40" fill="url(#bg)"/>
+    <circle cx="424" cy="512" r="40" fill="url(#bg)"/>
+    <circle cx="424" cy="688" r="40" fill="url(#bg)"/>
+    <circle cx="648" cy="512" r="40" fill="url(#bg)"/>
+  </g>
+</svg>
