@@ -272,8 +272,10 @@ final class AppStore: ObservableObject {
         }
     }
 
-    func merge(_ branch: Branch) {
-        perform("正在 Merge \(branch.name)…", success: "已合并 \(branch.name)") { try await $0.merge(branch.name) }
+    func mergeCommit(_ commit: Commit) {
+        perform("正在 Merge \(commit.shortHash)…", success: "已合并 \(commit.shortHash)") {
+            try await $0.merge(commit.hash)
+        }
     }
 
     private func perform(_ message: String, success: String, _ op: @escaping (GitService) async throws -> Void) {

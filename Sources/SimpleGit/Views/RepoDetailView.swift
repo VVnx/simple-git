@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RepoDetailView: View {
     @EnvironmentObject var store: AppStore
+    @State private var showMergeConfirm = false
 
     var body: some View {
         Group {
@@ -42,6 +43,18 @@ struct RepoDetailView: View {
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: store.successMessage)
         .toolbar { toolbarContent }
+        .confirmationDialog(
+            "合并提交",
+            isPresented: $showMergeConfirm,
+            presenting: store.selectedCommit
+        ) { commit in
+            Button("合并到 “\(store.status?.branch ?? "当前分支")”") {
+                store.mergeCommit(commit)
+            }
+            Button("取消", role: .cancel) {}
+        } message: { commit in
+            Text("把提交 \(commit.shortHash)(\(commit.subject))合并到当前分支 “\(store.status?.branch ?? "")” 吗?")
+        }
         .navigationTitle(store.selectedRepo?.name ?? "simple-git")
         .navigationSubtitle(store.status?.branch ?? "")
     }
@@ -74,7 +87,7 @@ struct RepoDetailView: View {
             Button {
                 store.fetch()
             } label: {
-                Label("Fetch", systemImage: "arrow.down.circle")
+                Label("Fetch", systemImage: "arrow.down.to.line")
             }
             .labelStyle(.titleAndIcon)
             .help("git fetch --all --prune:只下载远程更新,不改动工作区")
@@ -82,7 +95,7 @@ struct RepoDetailView: View {
             Button {
                 store.pull()
             } label: {
-                Label("Pull", systemImage: "arrow.down.to.line")
+                Label("Pull", systemImage: "arrow.down.circle")
             }
             .labelStyle(.titleAndIcon)
             .help("git pull:下载并合并到当前分支")
@@ -95,23 +108,16 @@ struct RepoDetailView: View {
             .labelStyle(.titleAndIcon)
             .help("git push:推送当前分支(无 upstream 时自动 -u)")
 
-            Menu {
-                if store.mergeableBranches.isEmpty {
-                    Text("没有可合并的分支")
-                } else {
-                    ForEach(store.mergeableBranches) { branch in
-                        Button {
-                            store.merge(branch)
-                        } label: {
-                            Label(branch.name, systemImage: branch.isRemote ? "cloud" : "arrow.triangle.branch")
-                        }
-                    }
-                }
+            Button {
+                showMergeConfirm = true
             } label: {
                 Label("Merge", systemImage: "arrow.triangle.merge")
             }
             .labelStyle(.titleAndIcon)
-            .help("把所选分支合并进当前分支")
+            .disabled(store.selectedCommit == nil)
+            .help(store.selectedCommit == nil
+                  ? "先在下方点选一个提交,再合并到当前分支"
+                  : "把所选提交合并到当前分支(会二次确认)")
 
             Button {
                 store.reload()

@@ -30,22 +30,29 @@ struct SidebarView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            Menu {
-                Button {
-                    addLocalRepo()
+            HStack {
+                Menu {
+                    Button {
+                        addLocalRepo()
+                    } label: {
+                        Label("打开本地仓库…", systemImage: "folder")
+                    }
+                    Button {
+                        showCloneSheet = true
+                    } label: {
+                        Label("克隆 URL…", systemImage: "arrow.down.doc")
+                    }
                 } label: {
-                    Label("打开本地仓库…", systemImage: "folder")
+                    Image(systemName: "plus.circle")
+                        .imageScale(.large)
                 }
-                Button {
-                    showCloneSheet = true
-                } label: {
-                    Label("克隆 URL…", systemImage: "arrow.down.circle")
-                }
-            } label: {
-                Label("添加仓库", systemImage: "plus")
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("添加仓库:打开本地或克隆 URL")
+
+                Spacer()
             }
-            .menuStyle(.borderlessButton)
             .padding(10)
         }
         .sheet(isPresented: $showCloneSheet) {
