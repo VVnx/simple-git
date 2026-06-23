@@ -13,11 +13,12 @@
 ## 构建与运行
 
 ```sh
-swift build          # 编译
-swift run simple-git # 运行(裸可执行文件,无需 Xcode)
+swift build                      # 编译
+swift run simple-git             # 运行(裸可执行文件,无需 Xcode)
+./Assets/make_app.sh /Applications  # release 打包成 .app 并安装(ad-hoc 签名,自用)
 ```
 
-也可用 Xcode 打开 `Package.swift` 后 ⌘R。改动后要看效果需重启 app(旧实例跑的是旧二进制)。
+也可用 Xcode 打开 `Package.swift` 后 ⌘R。改动后要看效果需重启 app(旧实例跑的是旧二进制);若用户在用已安装的 `.app`,改完要重新跑 `make_app.sh` 覆盖安装。
 
 ## 架构速查
 
