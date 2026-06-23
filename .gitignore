@@ -6,3 +6,4 @@ xcuserdata/
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 .netrc
+/dist
