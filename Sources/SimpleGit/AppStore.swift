@@ -30,6 +30,12 @@ final class AppStore: ObservableObject {
     @Published private(set) var isLoadingFiles = false
     private var filesGeneration = 0
 
+    // Within the detail panel: the file whose diff is shown on the right.
+    @Published var selectedFilePath: String?
+    @Published private(set) var fileDiff: String = ""
+    @Published private(set) var isLoadingDiff = false
+    private var diffGeneration = 0
+
     /// Ticks once a minute so relative timestamps in the graph stay fresh.
     @Published private(set) var now = Date()
     private var clockTimer: Timer?
@@ -182,6 +188,7 @@ final class AppStore: ObservableObject {
         selection = .none
         changedFiles = []
         workingFiles = []
+        resetFileDiff()
         filesGeneration += 1
         isLoadingFiles = false
     }
@@ -189,8 +196,41 @@ final class AppStore: ObservableObject {
     private func bumpFilesGeneration() -> Int {
         changedFiles = []
         workingFiles = []
+        resetFileDiff()
         filesGeneration += 1
         return filesGeneration
+    }
+
+    private func resetFileDiff() {
+        selectedFilePath = nil
+        fileDiff = ""
+        isLoadingDiff = false
+        diffGeneration += 1
+    }
+
+    /// Loads the diff for a file within the current selection (commit or working tree).
+    func selectFile(_ path: String) {
+        selectedFilePath = path
+        diffGeneration += 1
+        let generation = diffGeneration
+        let currentSelection = selection
+        guard let repo = selectedRepo else { fileDiff = ""; isLoadingDiff = false; return }
+        let service = GitService(path: repo.path)
+        isLoadingDiff = true
+        Task {
+            let text: String
+            switch currentSelection {
+            case .commit(let hash):
+                text = (try? await service.commitFileDiff(hash: hash, path: path)) ?? ""
+            case .uncommitted:
+                text = (try? await service.workingFileDiff(path: path)) ?? ""
+            case .none:
+                text = ""
+            }
+            guard generation == diffGeneration else { return }
+            fileDiff = text
+            isLoadingDiff = false
+        }
     }
 
     func copyCommitHash(_ commit: Commit) {
@@ -262,7 +302,23 @@ final class AppStore: ObservableObject {
                 refsMap[key]?.sort { $0.kind.rawValue < $1.kind.rawValue }
             }
 
-            let layout = GraphLayout.compute(commits)
+            // Inject a synthetic "uncommitted changes" node as a virtual child of
+            // HEAD, so the graph connects it to the local branch — not the topmost
+            // commit — exactly where the working tree is based.
+            var graphCommits = commits
+            if !statusVal.clean, let oid = statusVal.oid, oid != "(initial)",
+               commits.contains(where: { $0.hash == oid }) {
+                let uncommitted = Commit(
+                    hash: Commit.uncommittedHash,
+                    parents: [oid],
+                    authorName: "",
+                    authorEmail: "",
+                    date: Date(),
+                    subject: ""
+                )
+                graphCommits.insert(uncommitted, at: 0)
+            }
+            let layout = GraphLayout.compute(graphCommits)
 
             refsByCommit = refsMap
             branches = branchList.sorted { $0.name < $1.name }

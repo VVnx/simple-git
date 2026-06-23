@@ -77,12 +77,15 @@ struct GitService {
         var ahead = 0
         var behind = 0
         var upstream: String?
+        var oid: String?
         var changed = 0
         var untracked = 0
 
         for raw in out.split(separator: "\n", omittingEmptySubsequences: true) {
             let line = String(raw)
-            if let v = value(of: line, prefix: "# branch.head ") {
+            if let v = value(of: line, prefix: "# branch.oid ") {
+                oid = v
+            } else if let v = value(of: line, prefix: "# branch.head ") {
                 if v == "(detached)" { detached = true; branch = "detached HEAD" }
                 else { branch = v }
             } else if let v = value(of: line, prefix: "# branch.upstream ") {
@@ -100,7 +103,7 @@ struct GitService {
         }
 
         return RepoStatus(branch: branch, detached: detached, ahead: ahead, behind: behind,
-                          changedCount: changed, untrackedCount: untracked, upstream: upstream)
+                          changedCount: changed, untrackedCount: untracked, upstream: upstream, oid: oid)
     }
 
     /// Current working-tree changes — one entry per file (like a commit's file
@@ -186,6 +189,20 @@ struct GitService {
         return out
             .split(separator: "\n", omittingEmptySubsequences: true)
             .compactMap { ChangedFile(statusLine: String($0)) }
+    }
+
+    /// Unified diff of one file within a commit (vs its first parent).
+    func commitFileDiff(hash: String, path: String) async throws -> String {
+        let out = try await runner.run(["show", hash, "--format=", "-M", "--", path])
+        return String(out.drop(while: { $0 == "\n" }))
+    }
+
+    /// Unified diff of one file in the working tree (HEAD → working copy). Falls
+    /// back to showing a brand-new untracked file's contents as additions.
+    func workingFileDiff(path: String) async throws -> String {
+        let tracked = try await runner.run(["diff", "HEAD", "-M", "--", path])
+        if !tracked.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return tracked }
+        return try await runner.run(["diff", "--no-index", "--", "/dev/null", path], allowNonZero: true)
     }
 
     // MARK: Parsing

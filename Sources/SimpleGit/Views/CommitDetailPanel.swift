@@ -1,18 +1,24 @@
 import SwiftUI
 
-/// Bottom panel shown when a commit is clicked: header info + list of changed files.
+/// Bottom panel for a selected commit: header + (file list | file diff).
 struct CommitDetailPanel: View {
+    @EnvironmentObject var store: AppStore
     let commit: Commit
-    let files: [ChangedFile]
-    let isLoading: Bool
-    let onClose: () -> Void
-    let onCopyHash: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            content
+            HStack(spacing: 0) {
+                fileList
+                    .frame(width: 320)
+                Divider()
+                FileDiffPane(
+                    diff: store.fileDiff,
+                    isLoading: store.isLoadingDiff,
+                    hasSelection: store.selectedFilePath != nil
+                )
+            }
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
@@ -26,7 +32,7 @@ struct CommitDetailPanel: View {
                     .textSelection(.enabled)
 
                 HStack(spacing: 10) {
-                    Button(action: onCopyHash) {
+                    Button { store.copyCommitHash(commit) } label: {
                         Label(commit.shortHash, systemImage: "doc.on.doc")
                             .font(.system(.caption, design: .monospaced))
                     }
@@ -47,7 +53,7 @@ struct CommitDetailPanel: View {
 
             Spacer()
 
-            Button(action: onClose) {
+            Button { store.clearSelection() } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title3)
                     .foregroundStyle(.secondary)
@@ -59,29 +65,30 @@ struct CommitDetailPanel: View {
     }
 
     @ViewBuilder
-    private var content: some View {
-        if isLoading {
-            ProgressView()
-                .controlSize(.small)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if files.isEmpty {
-            Text(commit.parents.count > 1
-                 ? "合并提交:相对第一个父提交没有文件差异"
-                 : "此提交没有文件变更")
-                .font(.callout)
+    private var fileList: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("变更文件 (\(store.changedFiles.count))")
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("变更文件 (\(files.count))")
-                    .font(.caption.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+
+            if store.isLoadingFiles {
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if store.changedFiles.isEmpty {
+                Text(commit.parents.count > 1 ? "合并提交:相对第一个父提交无差异" : "此提交没有文件变更")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(files) { file in
-                            ChangedFileRow(file: file)
+                        ForEach(store.changedFiles) { file in
+                            ChangedFileRow(
+                                file: file,
+                                isSelected: file.path == store.selectedFilePath,
+                                onSelect: { store.selectFile(file.path) }
+                            )
                         }
                     }
                 }
@@ -92,6 +99,8 @@ struct CommitDetailPanel: View {
 
 struct ChangedFileRow: View {
     let file: ChangedFile
+    let isSelected: Bool
+    let onSelect: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -103,11 +112,14 @@ struct ChangedFileRow: View {
                 .font(.system(.callout, design: .monospaced))
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .textSelection(.enabled)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 2.5)
+        .padding(.vertical, 3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture { onSelect() }
     }
 
     private var head: String { String(file.status.prefix(1)) }

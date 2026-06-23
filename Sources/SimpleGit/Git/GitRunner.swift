@@ -14,13 +14,15 @@ struct GitRunner {
     let workingDirectory: String
 
     @discardableResult
-    func run(_ args: [String]) async throws -> String {
-        try await GitRunner.run(args, in: workingDirectory)
+    func run(_ args: [String], allowNonZero: Bool = false) async throws -> String {
+        try await GitRunner.run(args, in: workingDirectory, allowNonZero: allowNonZero)
     }
 
     /// Runs `git args...`. `directory` is the working directory (nil to inherit;
     /// callers that need a specific repo usually pass `-C <path>` in `args`).
-    static func run(_ args: [String], in directory: String?) async throws -> String {
+    /// `allowNonZero` returns stdout instead of throwing on a non-zero exit —
+    /// useful for `git diff --no-index`, which exits 1 when files differ.
+    static func run(_ args: [String], in directory: String?, allowNonZero: Bool = false) async throws -> String {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
@@ -79,7 +81,7 @@ struct GitRunner {
                 let out = String(decoding: outData, as: UTF8.self)
                 let err = String(decoding: errData, as: UTF8.self)
 
-                if process.terminationStatus == 0 {
+                if process.terminationStatus == 0 || allowNonZero {
                     cont.resume(returning: out)
                 } else {
                     let raw = err.isEmpty ? out : err

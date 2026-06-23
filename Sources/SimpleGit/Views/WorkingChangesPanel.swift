@@ -1,56 +1,69 @@
 import SwiftUI
 
-/// Bottom panel shown when the "未提交的更改" row is selected: a flat list of the
-/// working-tree's changed files, same layout as a commit's file list.
+/// Bottom panel for the working tree: header + (file list | file diff).
 struct WorkingChangesPanel: View {
-    let files: [WorkingFile]
-    let isLoading: Bool
-    let onClose: () -> Void
+    @EnvironmentObject var store: AppStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Label("未提交的更改", systemImage: "pencil.circle")
-                    .font(.headline)
-                Spacer()
-                Button(action: onClose) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("关闭")
-            }
-            .padding(10)
-
+            header
             Divider()
-
-            content
+            HStack(spacing: 0) {
+                fileList
+                    .frame(width: 320)
+                Divider()
+                FileDiffPane(
+                    diff: store.fileDiff,
+                    isLoading: store.isLoadingDiff,
+                    hasSelection: store.selectedFilePath != nil
+                )
+            }
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    @ViewBuilder
-    private var content: some View {
-        if isLoading {
-            ProgressView()
-                .controlSize(.small)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if files.isEmpty {
-            Text("工作区是干净的")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("变更文件 (\(files.count))")
-                    .font(.caption.weight(.semibold))
+    private var header: some View {
+        HStack {
+            Label("未提交的更改", systemImage: "pencil.circle")
+                .font(.headline)
+            Spacer()
+            Button { store.clearSelection() } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+            .help("关闭")
+        }
+        .padding(10)
+    }
+
+    @ViewBuilder
+    private var fileList: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("变更文件 (\(store.workingFiles.count))")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+
+            if store.isLoadingFiles {
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if store.workingFiles.isEmpty {
+                Text("工作区是干净的")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(files) { WorkingFileRow(file: $0) }
+                        ForEach(store.workingFiles) { file in
+                            WorkingFileRow(
+                                file: file,
+                                isSelected: file.path == store.selectedFilePath,
+                                onSelect: { store.selectFile(file.path) }
+                            )
+                        }
                     }
                 }
             }
@@ -60,6 +73,8 @@ struct WorkingChangesPanel: View {
 
 struct WorkingFileRow: View {
     let file: WorkingFile
+    let isSelected: Bool
+    let onSelect: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -71,11 +86,14 @@ struct WorkingFileRow: View {
                 .font(.system(.callout, design: .monospaced))
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .textSelection(.enabled)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 2.5)
+        .padding(.vertical, 3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture { onSelect() }
     }
 
     private var displayPath: String {

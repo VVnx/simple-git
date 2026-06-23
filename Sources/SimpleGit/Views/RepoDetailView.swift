@@ -17,24 +17,14 @@ struct RepoDetailView: View {
                     graph
                     if store.isUncommittedSelected {
                         Divider()
-                        WorkingChangesPanel(
-                            files: store.workingFiles,
-                            isLoading: store.isLoadingFiles,
-                            onClose: { store.clearSelection() }
-                        )
-                        .frame(height: 220)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        WorkingChangesPanel()
+                            .frame(height: 260)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     } else if let commit = store.selectedCommit {
                         Divider()
-                        CommitDetailPanel(
-                            commit: commit,
-                            files: store.changedFiles,
-                            isLoading: store.isLoadingFiles,
-                            onClose: { store.clearSelection() },
-                            onCopyHash: { store.copyCommitHash(commit) }
-                        )
-                        .frame(height: 220)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        CommitDetailPanel(commit: commit)
+                            .frame(height: 260)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     Divider()
                     StatusBarView(
@@ -91,7 +81,6 @@ struct RepoDetailView: View {
                 selectedHash: store.selectedCommit?.hash,
                 onSelect: { store.selectCommit($0) },
                 onCopyHash: { store.copyCommitHash($0) },
-                showUncommitted: !(store.status?.clean ?? true),
                 uncommittedCount: store.status.map { $0.changedCount + $0.untrackedCount } ?? 0,
                 isUncommittedSelected: store.isUncommittedSelected,
                 onSelectUncommitted: { store.selectUncommitted() }

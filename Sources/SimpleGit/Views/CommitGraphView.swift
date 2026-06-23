@@ -20,6 +20,61 @@ enum GraphPalette {
     }
 }
 
+// MARK: - Shared graph geometry & drawing
+
+enum GraphDraw {
+    static let rowHeight: CGFloat = 32
+    static let laneSpacing: CGFloat = 16
+    static let leftPad: CGFloat = 8
+    static let dotRadius: CGFloat = 4.5
+
+    static func laneX(_ column: Int) -> CGFloat {
+        leftPad + CGFloat(column) * laneSpacing + laneSpacing / 2
+    }
+
+    static func width(_ laneCount: Int) -> CGFloat {
+        leftPad + CGFloat(max(laneCount, 1)) * laneSpacing
+    }
+
+    static func drawEdges(_ node: CommitNode, in context: GraphicsContext, size: CGSize) {
+        let mid = size.height / 2
+        for edge in node.edges {
+            context.stroke(edgePath(edge, height: size.height, mid: mid),
+                           with: .color(GraphPalette.color(edge.colorIndex)),
+                           lineWidth: 1.7)
+        }
+    }
+
+    private static func edgePath(_ edge: GraphEdge, height: CGFloat, mid: CGFloat) -> Path {
+        var path = Path()
+        let x1 = laneX(edge.fromColumn)
+        let x2 = laneX(edge.toColumn)
+        switch edge.half {
+        case .top:
+            if x1 == x2 {
+                path.move(to: CGPoint(x: x1, y: 0))
+                path.addLine(to: CGPoint(x: x1, y: mid))
+            } else {
+                path.move(to: CGPoint(x: x1, y: 0))
+                path.addCurve(to: CGPoint(x: x2, y: mid),
+                              control1: CGPoint(x: x1, y: mid * 0.6),
+                              control2: CGPoint(x: x2, y: mid * 0.4))
+            }
+        case .bottom:
+            if x1 == x2 {
+                path.move(to: CGPoint(x: x1, y: mid))
+                path.addLine(to: CGPoint(x: x1, y: height))
+            } else {
+                path.move(to: CGPoint(x: x1, y: mid))
+                path.addCurve(to: CGPoint(x: x2, y: height),
+                              control1: CGPoint(x: x1, y: mid + (height - mid) * 0.4),
+                              control2: CGPoint(x: x2, y: mid + (height - mid) * 0.6))
+            }
+        }
+        return path
+    }
+}
+
 // MARK: - Graph list
 
 struct CommitGraphView: View {
@@ -31,7 +86,6 @@ struct CommitGraphView: View {
     let selectedHash: String?
     let onSelect: (Commit) -> Void
     let onCopyHash: (Commit) -> Void
-    let showUncommitted: Bool
     let uncommittedCount: Int
     let isUncommittedSelected: Bool
     let onSelectUncommitted: () -> Void
@@ -39,29 +93,27 @@ struct CommitGraphView: View {
     var body: some View {
         ScrollView(.vertical) {
             LazyVStack(spacing: 0) {
-                if showUncommitted {
-                    // Sit on the topmost commit's lane and connect down into it.
-                    UncommittedRowView(
-                        column: nodes.first?.column ?? 0,
-                        laneCount: laneCount,
-                        count: uncommittedCount,
-                        isSelected: isUncommittedSelected,
-                        onSelect: onSelectUncommitted
-                    )
-                    Divider().opacity(0.2)
-                }
                 ForEach(nodes) { node in
-                    CommitRowView(
-                        node: node,
-                        laneCount: laneCount,
-                        refs: refsByCommit[node.commit.hash] ?? [],
-                        currentBranch: currentBranch,
-                        now: now,
-                        isSelected: node.commit.hash == selectedHash,
-                        connectsUp: showUncommitted && node.id == nodes.first?.id,
-                        onSelect: { onSelect(node.commit) },
-                        onCopyHash: { onCopyHash(node.commit) }
-                    )
+                    if node.commit.isUncommitted {
+                        UncommittedRowView(
+                            node: node,
+                            laneCount: laneCount,
+                            count: uncommittedCount,
+                            isSelected: isUncommittedSelected,
+                            onSelect: onSelectUncommitted
+                        )
+                    } else {
+                        CommitRowView(
+                            node: node,
+                            laneCount: laneCount,
+                            refs: refsByCommit[node.commit.hash] ?? [],
+                            currentBranch: currentBranch,
+                            now: now,
+                            isSelected: node.commit.hash == selectedHash,
+                            onSelect: { onSelect(node.commit) },
+                            onCopyHash: { onCopyHash(node.commit) }
+                        )
+                    }
                     Divider().opacity(0.2)
                 }
             }
@@ -70,58 +122,7 @@ struct CommitGraphView: View {
     }
 }
 
-/// The "未提交的更改" pseudo-row at the top of the graph (hollow node).
-struct UncommittedRowView: View {
-    let column: Int
-    let laneCount: Int
-    let count: Int
-    let isSelected: Bool
-    let onSelect: () -> Void
-
-    private var graphWidth: CGFloat {
-        CommitRowView.leftPad + CGFloat(max(laneCount, 1)) * CommitRowView.laneSpacing
-    }
-
-    private func x(_ col: Int) -> CGFloat {
-        CommitRowView.leftPad + CGFloat(col) * CommitRowView.laneSpacing + CommitRowView.laneSpacing / 2
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Canvas { context, size in
-                let cx = x(column)
-                let mid = size.height / 2
-                // Stub line connecting down toward the HEAD commit below.
-                var line = Path()
-                line.move(to: CGPoint(x: cx, y: mid))
-                line.addLine(to: CGPoint(x: cx, y: size.height))
-                context.stroke(line, with: .color(GraphPalette.color(column)), lineWidth: 1.7)
-                // Hollow node.
-                let r = CommitRowView.dotRadius
-                let rect = CGRect(x: cx - r, y: mid - r, width: r * 2, height: r * 2)
-                context.fill(Path(ellipseIn: rect), with: .color(Color(nsColor: .textBackgroundColor)))
-                context.stroke(Path(ellipseIn: rect), with: .color(.secondary), lineWidth: 1.6)
-            }
-            .frame(width: graphWidth, height: CommitRowView.rowHeight)
-
-            HStack(spacing: 6) {
-                Text("未提交的更改")
-                    .fontWeight(.semibold)
-                Text("\(count) 个文件")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.trailing, 12)
-        }
-        .frame(height: CommitRowView.rowHeight)
-        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
-        .contentShape(Rectangle())
-        .onTapGesture { onSelect() }
-    }
-}
-
-// MARK: - One row
+// MARK: - Commit row
 
 struct CommitRowView: View {
     let node: CommitNode
@@ -130,23 +131,20 @@ struct CommitRowView: View {
     let currentBranch: String?
     let now: Date
     let isSelected: Bool
-    var connectsUp: Bool = false
     let onSelect: () -> Void
     let onCopyHash: () -> Void
 
-    static let rowHeight: CGFloat = 32
-    static let laneSpacing: CGFloat = 16
-    static let leftPad: CGFloat = 8
-    static let dotRadius: CGFloat = 4.5
-
-    private var graphWidth: CGFloat {
-        Self.leftPad + CGFloat(max(laneCount, 1)) * Self.laneSpacing
-    }
-
     var body: some View {
         HStack(spacing: 8) {
-            Canvas { context, size in draw(in: context, size: size) }
-                .frame(width: graphWidth, height: Self.rowHeight)
+            Canvas { context, size in
+                GraphDraw.drawEdges(node, in: context, size: size)
+                let center = CGPoint(x: GraphDraw.laneX(node.column), y: size.height / 2)
+                let r = GraphDraw.dotRadius
+                let dot = Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+                context.fill(dot, with: .color(GraphPalette.color(node.colorIndex)))
+                context.stroke(dot, with: .color(Color(nsColor: .textBackgroundColor)), lineWidth: 1.2)
+            }
+            .frame(width: GraphDraw.width(laneCount), height: GraphDraw.rowHeight)
 
             HStack(spacing: 6) {
                 ForEach(refs) { ref in
@@ -159,10 +157,8 @@ struct CommitRowView: View {
                 Spacer(minLength: 8)
 
                 HStack(spacing: 4) {
-                    Text(node.commit.authorName)
-                        .foregroundStyle(.secondary)
-                    Text(node.commit.authorEmail)
-                        .foregroundStyle(.tertiary)
+                    Text(node.commit.authorName).foregroundStyle(.secondary)
+                    Text(node.commit.authorEmail).foregroundStyle(.tertiary)
                 }
                 .font(.caption)
                 .lineLimit(1)
@@ -184,73 +180,49 @@ struct CommitRowView: View {
             }
             .padding(.trailing, 12)
         }
-        .frame(height: Self.rowHeight)
+        .frame(height: GraphDraw.rowHeight)
         .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
         .contentShape(Rectangle())
         .onTapGesture { onSelect() }
         .help("\(node.commit.shortHash) · \(node.commit.authorName) <\(node.commit.authorEmail)> · \(RelativeDate.absoluteString(from: node.commit.date))\n\(node.commit.subject)")
     }
+}
 
-    private func x(_ column: Int) -> CGFloat {
-        Self.leftPad + CGFloat(column) * Self.laneSpacing + Self.laneSpacing / 2
-    }
+// MARK: - Uncommitted row (synthetic node, hollow dot)
 
-    private func draw(in context: GraphicsContext, size: CGSize) {
-        let mid = size.height / 2
+struct UncommittedRowView: View {
+    let node: CommitNode
+    let laneCount: Int
+    let count: Int
+    let isSelected: Bool
+    let onSelect: () -> Void
 
-        // Stub connecting up to the "uncommitted changes" node above the top commit.
-        if connectsUp {
-            var up = Path()
-            up.move(to: CGPoint(x: x(node.column), y: 0))
-            up.addLine(to: CGPoint(x: x(node.column), y: mid))
-            context.stroke(up, with: .color(GraphPalette.color(node.colorIndex)), lineWidth: 1.7)
-        }
-
-        for edge in node.edges {
-            let path = edgePath(edge, height: size.height, mid: mid)
-            context.stroke(path, with: .color(GraphPalette.color(edge.colorIndex)), lineWidth: 1.7)
-        }
-
-        // Node dot, drawn on top of the lines.
-        let center = CGPoint(x: x(node.column), y: mid)
-        let r = Self.dotRadius
-        let dot = Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
-        context.fill(dot, with: .color(GraphPalette.color(node.colorIndex)))
-        context.stroke(dot, with: .color(Color(nsColor: .textBackgroundColor)), lineWidth: 1.2)
-    }
-
-    private func edgePath(_ edge: GraphEdge, height: CGFloat, mid: CGFloat) -> Path {
-        var path = Path()
-        let x1 = x(edge.fromColumn)
-        let x2 = x(edge.toColumn)
-
-        switch edge.half {
-        case .top:
-            if x1 == x2 {
-                path.move(to: CGPoint(x: x1, y: 0))
-                path.addLine(to: CGPoint(x: x1, y: mid))
-            } else {
-                path.move(to: CGPoint(x: x1, y: 0))
-                path.addCurve(
-                    to: CGPoint(x: x2, y: mid),
-                    control1: CGPoint(x: x1, y: mid * 0.6),
-                    control2: CGPoint(x: x2, y: mid * 0.4)
-                )
+    var body: some View {
+        HStack(spacing: 8) {
+            Canvas { context, size in
+                GraphDraw.drawEdges(node, in: context, size: size)
+                let center = CGPoint(x: GraphDraw.laneX(node.column), y: size.height / 2)
+                let r = GraphDraw.dotRadius
+                let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
+                context.fill(Path(ellipseIn: rect), with: .color(Color(nsColor: .textBackgroundColor)))
+                context.stroke(Path(ellipseIn: rect), with: .color(.secondary), lineWidth: 1.6)
             }
-        case .bottom:
-            if x1 == x2 {
-                path.move(to: CGPoint(x: x1, y: mid))
-                path.addLine(to: CGPoint(x: x1, y: height))
-            } else {
-                path.move(to: CGPoint(x: x1, y: mid))
-                path.addCurve(
-                    to: CGPoint(x: x2, y: height),
-                    control1: CGPoint(x: x1, y: mid + (height - mid) * 0.4),
-                    control2: CGPoint(x: x2, y: mid + (height - mid) * 0.6)
-                )
+            .frame(width: GraphDraw.width(laneCount), height: GraphDraw.rowHeight)
+
+            HStack(spacing: 6) {
+                Text("未提交的更改")
+                    .fontWeight(.semibold)
+                Text("\(count) 个文件")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
             }
+            .padding(.trailing, 12)
         }
-        return path
+        .frame(height: GraphDraw.rowHeight)
+        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture { onSelect() }
     }
 }
 

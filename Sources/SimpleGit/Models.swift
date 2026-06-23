@@ -36,6 +36,11 @@ struct Commit: Identifiable, Hashable {
 
     var id: String { hash }
     var shortHash: String { String(hash.prefix(7)) }
+
+    /// Sentinel hash for the synthetic "uncommitted changes" node injected into
+    /// the graph as a virtual child of HEAD.
+    static let uncommittedHash = "·uncommitted·"
+    var isUncommitted: Bool { hash == Commit.uncommittedHash }
 }
 
 // MARK: - Branch (for the merge picker)
@@ -59,6 +64,7 @@ struct RepoStatus {
     var changedCount: Int      // staged + unstaged + conflicted
     var untrackedCount: Int
     var upstream: String?
+    var oid: String?           // HEAD commit hash ("(initial)" on an unborn branch)
     var clean: Bool { changedCount == 0 && untrackedCount == 0 }
 }
 
