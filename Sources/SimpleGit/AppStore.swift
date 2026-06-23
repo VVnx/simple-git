@@ -44,6 +44,11 @@ final class AppStore: ObservableObject {
     /// so a slow repo's results can't clobber a repo the user has since switched to.
     private var loadGeneration = 0
 
+    /// Watches the selected repo's `.git` so external changes (e.g. a commit made
+    /// in a terminal or agent) refresh the UI automatically. Recreated on switch.
+    private var watcher: RepoWatcher?
+    private var watchedPath: String?
+
     let commitLimit = 400
     private let defaultsKey = "repositories.v1"
 
@@ -257,11 +262,40 @@ final class AppStore: ObservableObject {
     func reload() {
         guard let repo = selectedRepo else {
             clearLoadedData()
+            stopWatching()
             return
         }
+        startWatching(repo)
         loadGeneration += 1
         let generation = loadGeneration
         Task { await load(repo: repo, generation: generation) }
+    }
+
+    // MARK: - Auto-refresh on external changes
+
+    private func startWatching(_ repo: Repository) {
+        guard watchedPath != repo.path else { return }   // already watching this repo
+        watcher = RepoWatcher(path: repo.path) { [weak self] in
+            Task { @MainActor in self?.refresh() }
+        }
+        watchedPath = repo.path
+    }
+
+    private func stopWatching() {
+        watcher = nil
+        watchedPath = nil
+    }
+
+    /// Re-reads on-disk state after an external change: the graph + status, plus
+    /// the working-changes panel if that's the one open (a commit's file list is
+    /// immutable, so it needs no refresh). Triggered by `RepoWatcher`.
+    func refresh() {
+        reload()
+        if selection == .uncommitted {
+            let keepFile = selectedFilePath
+            selectUncommitted()
+            if let keepFile { selectFile(keepFile) }
+        }
     }
 
     private func clearLoadedData() {
