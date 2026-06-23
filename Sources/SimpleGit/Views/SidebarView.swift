@@ -118,8 +118,8 @@ private struct RepoRow: View {
             if hovering {
                 HStack(spacing: 2) {
                     iconButton("folder", help: "在 Finder 中打开", action: onOpen)
-                    iconButton(repo.masked ? "lock.open" : "lock",
-                               help: repo.masked ? "解密(显示名称)" : "加密(隐藏名称)",
+                    iconButton(repo.masked ? "eye" : "eye.slash",
+                               help: repo.masked ? "显示名称" : "隐藏名称",
                                action: onToggleMask)
                     iconButton("trash", help: "移除", action: onRemove)
                 }
@@ -128,10 +128,10 @@ private struct RepoRow: View {
         }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .help(repo.masked ? "已加密(已隐藏路径)" : repo.path)
+        .help(repo.masked ? "已隐藏名称" : repo.path)
         .contextMenu {
             Button("在 Finder 中显示") { onOpen() }
-            Button(repo.masked ? "解密(显示名称)" : "加密(隐藏名称)") { onToggleMask() }
+            Button(repo.masked ? "显示名称" : "隐藏名称") { onToggleMask() }
             Divider()
             Button("移除", role: .destructive) { onRemove() }
         }
