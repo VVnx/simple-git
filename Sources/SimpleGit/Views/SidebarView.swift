@@ -9,7 +9,7 @@ struct SidebarView: View {
         List(selection: selectionBinding) {
             Section("仓库") {
                 ForEach(store.repositories) { repo in
-                    Label(repo.name, systemImage: "folder")
+                    Text(repo.name)
                         .tag(repo.id)
                         .help(repo.path)
                         .contextMenu {
