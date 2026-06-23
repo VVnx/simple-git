@@ -179,7 +179,9 @@ struct GitService {
     /// parent (or the whole tree for the root); for a merge it's the net change vs
     /// the first parent.
     func changedFiles(of commit: Commit) async throws -> [ChangedFile] {
-        var args = ["diff-tree", "-r", "-M", "--name-status", "--no-commit-id"]
+        // core.quotePath=false keeps non-ASCII paths (e.g. Chinese) raw, so the
+        // path can be passed straight back to `git show` to load its diff.
+        var args = ["-c", "core.quotePath=false", "diff-tree", "-r", "-M", "--name-status", "--no-commit-id"]
         if commit.parents.count > 1 {
             args += [commit.parents[0], commit.hash]
         } else {
@@ -193,16 +195,16 @@ struct GitService {
 
     /// Unified diff of one file within a commit (vs its first parent).
     func commitFileDiff(hash: String, path: String) async throws -> String {
-        let out = try await runner.run(["show", hash, "--format=", "-M", "--", path])
+        let out = try await runner.run(["-c", "core.quotePath=false", "show", hash, "--format=", "-M", "--", path])
         return String(out.drop(while: { $0 == "\n" }))
     }
 
     /// Unified diff of one file in the working tree (HEAD → working copy). Falls
     /// back to showing a brand-new untracked file's contents as additions.
     func workingFileDiff(path: String) async throws -> String {
-        let tracked = try await runner.run(["diff", "HEAD", "-M", "--", path])
+        let tracked = try await runner.run(["-c", "core.quotePath=false", "diff", "HEAD", "-M", "--", path])
         if !tracked.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return tracked }
-        return try await runner.run(["diff", "--no-index", "--", "/dev/null", path], allowNonZero: true)
+        return try await runner.run(["-c", "core.quotePath=false", "diff", "--no-index", "--", "/dev/null", path], allowNonZero: true)
     }
 
     // MARK: Parsing
