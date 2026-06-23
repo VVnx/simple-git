@@ -91,6 +91,8 @@ struct ToastView: View {
 struct StatusBarView: View {
     let status: RepoStatus?
     let busy: String?
+    var onOpenCodex: (() -> Void)? = nil
+    var onOpenClaude: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 14) {
@@ -108,14 +110,6 @@ struct StatusBarView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 }
-
-                if status.clean {
-                    Label("干净", systemImage: "checkmark.circle")
-                        .foregroundStyle(.green)
-                } else {
-                    Label("\(status.changedCount + status.untrackedCount) 处改动", systemImage: "pencil.circle")
-                        .foregroundStyle(.orange)
-                }
             } else {
                 Text("—").foregroundStyle(.secondary)
             }
@@ -127,6 +121,23 @@ struct StatusBarView: View {
                     ProgressView().controlSize(.small)
                     Text(busy).foregroundStyle(.secondary)
                 }
+            }
+
+            if onOpenCodex != nil || onOpenClaude != nil {
+                HStack(spacing: 8) {
+                    if let onOpenCodex {
+                        Button(action: onOpenCodex) {
+                            Label("Codex", systemImage: "chevron.left.forwardslash.chevron.right")
+                        }
+                    }
+                    if let onOpenClaude {
+                        Button(action: onOpenClaude) {
+                            Label("Claude", systemImage: "sparkles")
+                        }
+                    }
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
             }
         }
         .font(.callout)

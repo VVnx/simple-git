@@ -23,9 +23,10 @@ final class AppStore: ObservableObject {
     @Published var successMessage: String?
     private var successClearTask: Task<Void, Never>?
 
-    // Selected commit & its changed files (bottom detail panel)
-    @Published var selectedCommitID: String?
+    // Bottom detail panel: either a commit's diff or the working tree's changes.
+    @Published var selection: GraphSelection = .none
     @Published private(set) var changedFiles: [ChangedFile] = []
+    @Published private(set) var workingFiles: [WorkingFile] = []
     @Published private(set) var isLoadingFiles = false
     private var filesGeneration = 0
 
@@ -59,9 +60,11 @@ final class AppStore: ObservableObject {
     /// The currently inspected commit, resolved against the loaded graph so it
     /// drops automatically if a reload no longer contains it.
     var selectedCommit: Commit? {
-        guard let id = selectedCommitID else { return nil }
-        return nodes.first { $0.commit.hash == id }?.commit
+        guard case let .commit(hash) = selection else { return nil }
+        return nodes.first { $0.commit.hash == hash }?.commit
     }
+
+    var isUncommittedSelected: Bool { selection == .uncommitted }
 
     // MARK: - Persistence
 
@@ -141,21 +144,16 @@ final class AppStore: ObservableObject {
 
     func select(_ id: Repository.ID?) {
         selectedRepoID = id
-        selectCommit(nil)
+        clearSelection()
         reload()
     }
 
-    // MARK: - Commit inspection
+    // MARK: - Graph row inspection
 
-    func selectCommit(_ commit: Commit?) {
-        selectedCommitID = commit?.hash
-        changedFiles = []
-        filesGeneration += 1
-        guard let commit, let repo = selectedRepo else {
-            isLoadingFiles = false
-            return
-        }
-        let generation = filesGeneration
+    func selectCommit(_ commit: Commit) {
+        selection = .commit(commit.hash)
+        let generation = bumpFilesGeneration()
+        guard let repo = selectedRepo else { isLoadingFiles = false; return }
         let service = GitService(path: repo.path)
         isLoadingFiles = true
         Task {
@@ -166,10 +164,49 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func selectUncommitted() {
+        selection = .uncommitted
+        let generation = bumpFilesGeneration()
+        guard let repo = selectedRepo else { isLoadingFiles = false; return }
+        let service = GitService(path: repo.path)
+        isLoadingFiles = true
+        Task {
+            let files = (try? await service.workingFiles()) ?? []
+            guard generation == filesGeneration else { return }
+            workingFiles = files
+            isLoadingFiles = false
+        }
+    }
+
+    func clearSelection() {
+        selection = .none
+        changedFiles = []
+        workingFiles = []
+        filesGeneration += 1
+        isLoadingFiles = false
+    }
+
+    private func bumpFilesGeneration() -> Int {
+        changedFiles = []
+        workingFiles = []
+        filesGeneration += 1
+        return filesGeneration
+    }
+
     func copyCommitHash(_ commit: Commit) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(commit.hash, forType: .string)
         flashSuccess("已复制 hash \(commit.shortHash)")
+    }
+
+    /// Launches an external app (Codex / Claude) via `open -a`.
+    func openExternalApp(_ appName: String) {
+        Task.detached {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.arguments = ["-a", appName]
+            try? process.run()
+        }
     }
 
     // MARK: - Loading

@@ -31,10 +31,25 @@ struct CommitGraphView: View {
     let selectedHash: String?
     let onSelect: (Commit) -> Void
     let onCopyHash: (Commit) -> Void
+    let showUncommitted: Bool
+    let uncommittedCount: Int
+    let isUncommittedSelected: Bool
+    let onSelectUncommitted: () -> Void
 
     var body: some View {
         ScrollView(.vertical) {
             LazyVStack(spacing: 0) {
+                if showUncommitted {
+                    // Sit on the topmost commit's lane and connect down into it.
+                    UncommittedRowView(
+                        column: nodes.first?.column ?? 0,
+                        laneCount: laneCount,
+                        count: uncommittedCount,
+                        isSelected: isUncommittedSelected,
+                        onSelect: onSelectUncommitted
+                    )
+                    Divider().opacity(0.2)
+                }
                 ForEach(nodes) { node in
                     CommitRowView(
                         node: node,
@@ -43,6 +58,7 @@ struct CommitGraphView: View {
                         currentBranch: currentBranch,
                         now: now,
                         isSelected: node.commit.hash == selectedHash,
+                        connectsUp: showUncommitted && node.id == nodes.first?.id,
                         onSelect: { onSelect(node.commit) },
                         onCopyHash: { onCopyHash(node.commit) }
                     )
@@ -51,6 +67,57 @@ struct CommitGraphView: View {
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
+    }
+}
+
+/// The "未提交的更改" pseudo-row at the top of the graph (hollow node).
+struct UncommittedRowView: View {
+    let column: Int
+    let laneCount: Int
+    let count: Int
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    private var graphWidth: CGFloat {
+        CommitRowView.leftPad + CGFloat(max(laneCount, 1)) * CommitRowView.laneSpacing
+    }
+
+    private func x(_ col: Int) -> CGFloat {
+        CommitRowView.leftPad + CGFloat(col) * CommitRowView.laneSpacing + CommitRowView.laneSpacing / 2
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Canvas { context, size in
+                let cx = x(column)
+                let mid = size.height / 2
+                // Stub line connecting down toward the HEAD commit below.
+                var line = Path()
+                line.move(to: CGPoint(x: cx, y: mid))
+                line.addLine(to: CGPoint(x: cx, y: size.height))
+                context.stroke(line, with: .color(GraphPalette.color(column)), lineWidth: 1.7)
+                // Hollow node.
+                let r = CommitRowView.dotRadius
+                let rect = CGRect(x: cx - r, y: mid - r, width: r * 2, height: r * 2)
+                context.fill(Path(ellipseIn: rect), with: .color(Color(nsColor: .textBackgroundColor)))
+                context.stroke(Path(ellipseIn: rect), with: .color(.secondary), lineWidth: 1.6)
+            }
+            .frame(width: graphWidth, height: CommitRowView.rowHeight)
+
+            HStack(spacing: 6) {
+                Text("未提交的更改")
+                    .fontWeight(.semibold)
+                Text("\(count) 个文件")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.trailing, 12)
+        }
+        .frame(height: CommitRowView.rowHeight)
+        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture { onSelect() }
     }
 }
 
@@ -63,6 +130,7 @@ struct CommitRowView: View {
     let currentBranch: String?
     let now: Date
     let isSelected: Bool
+    var connectsUp: Bool = false
     let onSelect: () -> Void
     let onCopyHash: () -> Void
 
@@ -129,6 +197,14 @@ struct CommitRowView: View {
 
     private func draw(in context: GraphicsContext, size: CGSize) {
         let mid = size.height / 2
+
+        // Stub connecting up to the "uncommitted changes" node above the top commit.
+        if connectsUp {
+            var up = Path()
+            up.move(to: CGPoint(x: x(node.column), y: 0))
+            up.addLine(to: CGPoint(x: x(node.column), y: mid))
+            context.stroke(up, with: .color(GraphPalette.color(node.colorIndex)), lineWidth: 1.7)
+        }
 
         for edge in node.edges {
             let path = edgePath(edge, height: size.height, mid: mid)

@@ -15,22 +15,36 @@ struct RepoDetailView: View {
             } else {
                 VStack(spacing: 0) {
                     graph
-                    if let commit = store.selectedCommit {
+                    if store.isUncommittedSelected {
+                        Divider()
+                        WorkingChangesPanel(
+                            files: store.workingFiles,
+                            isLoading: store.isLoadingFiles,
+                            onClose: { store.clearSelection() }
+                        )
+                        .frame(height: 220)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else if let commit = store.selectedCommit {
                         Divider()
                         CommitDetailPanel(
                             commit: commit,
                             files: store.changedFiles,
                             isLoading: store.isLoadingFiles,
-                            onClose: { store.selectCommit(nil) },
+                            onClose: { store.clearSelection() },
                             onCopyHash: { store.copyCommitHash(commit) }
                         )
                         .frame(height: 220)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     Divider()
-                    StatusBarView(status: store.status, busy: store.busyMessage)
+                    StatusBarView(
+                        status: store.status,
+                        busy: store.busyMessage,
+                        onOpenCodex: { store.openExternalApp("Codex") },
+                        onOpenClaude: { store.openExternalApp("Claude") }
+                    )
                 }
-                .animation(.easeInOut(duration: 0.2), value: store.selectedCommitID)
+                .animation(.easeInOut(duration: 0.2), value: store.selection)
             }
         }
         .overlay(alignment: .top) {
@@ -74,9 +88,13 @@ struct RepoDetailView: View {
                 refsByCommit: store.refsByCommit,
                 currentBranch: store.status?.branch,
                 now: store.now,
-                selectedHash: store.selectedCommitID,
+                selectedHash: store.selectedCommit?.hash,
                 onSelect: { store.selectCommit($0) },
-                onCopyHash: { store.copyCommitHash($0) }
+                onCopyHash: { store.copyCommitHash($0) },
+                showUncommitted: !(store.status?.clean ?? true),
+                uncommittedCount: store.status.map { $0.changedCount + $0.untrackedCount } ?? 0,
+                isUncommittedSelected: store.isUncommittedSelected,
+                onSelectUncommitted: { store.selectUncommitted() }
             )
         }
     }

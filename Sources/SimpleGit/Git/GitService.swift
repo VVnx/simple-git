@@ -103,6 +103,56 @@ struct GitService {
                           changedCount: changed, untrackedCount: untracked, upstream: upstream)
     }
 
+    /// Current working-tree changes — one entry per file (like a commit's file
+    /// list). Badge prefers the work-tree status, falling back to the index one.
+    func workingFiles() async throws -> [WorkingFile] {
+        // core.quotePath=false keeps non-ASCII paths (e.g. Chinese) readable.
+        let out = try await runner.run(["-c", "core.quotePath=false", "status", "--porcelain=v2"])
+        var result: [WorkingFile] = []
+        for raw in out.split(separator: "\n", omittingEmptySubsequences: true) {
+            let line = String(raw)
+            if line.hasPrefix("1 ") || line.hasPrefix("2 ") {
+                let isRename = line.hasPrefix("2 ")
+                let fixedCount = isRename ? 9 : 8
+                let parts = Self.splitFields(line, count: fixedCount)
+                guard parts.count == fixedCount + 1 else { continue }
+                let xy = Array(parts[1])
+                let x = xy.count > 0 ? String(xy[0]) : "."
+                let y = xy.count > 1 ? String(xy[1]) : "."
+                var path = parts[fixedCount]
+                var oldPath: String?
+                if isRename {
+                    let comps = path.components(separatedBy: "\t")
+                    if comps.count >= 2 { path = comps[0]; oldPath = comps[1] }
+                }
+                let badge = y != "." ? y : x
+                result.append(WorkingFile(badge: badge, path: path, oldPath: oldPath))
+            } else if line.hasPrefix("u ") {
+                let parts = Self.splitFields(line, count: 10)
+                guard parts.count == 11 else { continue }
+                result.append(WorkingFile(badge: "U", path: parts[10], oldPath: nil))
+            } else if line.hasPrefix("? ") {
+                result.append(WorkingFile(badge: "?", path: String(line.dropFirst(2)), oldPath: nil))
+            }
+            // "! " (ignored) entries are skipped.
+        }
+        return result
+    }
+
+    /// Splits `line` into the first `count` space-separated fields plus the
+    /// remaining tail as one final element (so a path with spaces stays intact).
+    private static func splitFields(_ line: String, count: Int) -> [String] {
+        var fields: [String] = []
+        var rest = Substring(line)
+        for _ in 0..<count {
+            guard let space = rest.firstIndex(of: " ") else { return fields + [String(rest)] }
+            fields.append(String(rest[..<space]))
+            rest = rest[rest.index(after: space)...]
+        }
+        fields.append(String(rest))
+        return fields
+    }
+
     // MARK: Mutations
 
     func fetch() async throws { try await runner.run(["fetch", "--all", "--prune"]) }

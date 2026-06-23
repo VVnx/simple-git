@@ -89,6 +89,23 @@ struct GraphLayoutResult {
     let laneCount: Int
 }
 
+// MARK: - Graph selection (commit row vs. the uncommitted-changes row)
+
+enum GraphSelection: Equatable {
+    case none
+    case uncommitted
+    case commit(String)   // hash
+}
+
+// MARK: - Working-tree file (uncommitted changes)
+
+struct WorkingFile: Identifiable {
+    let badge: String       // M / A / D / R / C / T / U / ?
+    let path: String
+    let oldPath: String?
+    var id: String { "\(badge)|\(oldPath ?? "")|\(path)" }
+}
+
 // MARK: - Changed file (commit detail)
 
 struct ChangedFile: Identifiable {
