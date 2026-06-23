@@ -53,3 +53,7 @@ Sources/SimpleGit/
 - 没有 commit / stage / diff 视图(刻意不做)
 - push 无 upstream 时会失败弹错(后续可加 `--set-upstream`)
 - graph 默认加载最近 400 条提交(`--all --topo-order`)
+
+## 许可证
+
+[MIT](LICENSE) © 2026 wangxi
