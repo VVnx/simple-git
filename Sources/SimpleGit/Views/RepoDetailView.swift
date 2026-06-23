@@ -29,7 +29,6 @@ struct RepoDetailView: View {
                     Divider()
                     StatusBarView(
                         status: store.status,
-                        busy: store.busyMessage,
                         onTapBranch: { store.locateCurrentHead() },
                         onOpenCodex: { store.openExternalApp("Codex") },
                         onOpenClaude: { store.openExternalApp("Claude") },
@@ -40,13 +39,18 @@ struct RepoDetailView: View {
             }
         }
         .overlay(alignment: .top) {
-            if let success = store.successMessage {
-                ToastView(text: success)
-                    .padding(.top, 10)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(1)
+            Group {
+                if let busy = store.busyMessage {
+                    ToastView(text: busy, kind: .progress)
+                } else if let success = store.successMessage {
+                    ToastView(text: success, kind: .success)
+                }
             }
+            .padding(.top, 10)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .zIndex(1)
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: store.busyMessage)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: store.successMessage)
         .toolbar { toolbarContent }
         .confirmationDialog(

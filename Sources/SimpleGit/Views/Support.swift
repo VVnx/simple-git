@@ -84,23 +84,38 @@ struct EmptyStateView: View {
     }
 }
 
-// MARK: - Success toast
+// MARK: - Toast (success / in-progress)
 
 struct ToastView: View {
+    enum Kind { case success, progress }
     let text: String
+    var kind: Kind = .success
 
     var body: some View {
         HStack(spacing: 7) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            switch kind {
+            case .success:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            case .progress:
+                ProgressView()
+                    .controlSize(.small)
+            }
             Text(text)
                 .font(.callout.weight(.medium))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
         .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.green.opacity(0.35), lineWidth: 1))
+        .overlay(Capsule().strokeBorder(borderColor, lineWidth: 1))
         .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+    }
+
+    private var borderColor: Color {
+        switch kind {
+        case .success: return .green.opacity(0.35)
+        case .progress: return .secondary.opacity(0.25)
+        }
     }
 }
 
@@ -108,7 +123,6 @@ struct ToastView: View {
 
 struct StatusBarView: View {
     let status: RepoStatus?
-    let busy: String?
     var onTapBranch: (() -> Void)? = nil
     var onOpenCodex: (() -> Void)? = nil
     var onOpenClaude: (() -> Void)? = nil
@@ -141,13 +155,6 @@ struct StatusBarView: View {
             }
 
             Spacer()
-
-            if let busy {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text(busy).foregroundStyle(.secondary)
-                }
-            }
 
             if onOpenCodex != nil || onOpenClaude != nil || onOpenVSCode != nil {
                 HStack(spacing: 8) {
