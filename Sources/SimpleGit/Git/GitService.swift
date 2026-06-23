@@ -71,7 +71,9 @@ struct GitService {
     }
 
     func status() async throws -> RepoStatus {
-        let out = try await runner.run(["status", "--porcelain=v2", "--branch"])
+        // --untracked-files=all expands untracked directories into individual files
+        // so the count matches the per-file list in workingFiles().
+        let out = try await runner.run(["status", "--porcelain=v2", "--branch", "--untracked-files=all"])
         var branch = "HEAD"
         var detached = false
         var ahead = 0
@@ -109,8 +111,10 @@ struct GitService {
     /// Current working-tree changes — one entry per file (like a commit's file
     /// list). Badge prefers the work-tree status, falling back to the index one.
     func workingFiles() async throws -> [WorkingFile] {
-        // core.quotePath=false keeps non-ASCII paths (e.g. Chinese) readable.
-        let out = try await runner.run(["-c", "core.quotePath=false", "status", "--porcelain=v2"])
+        // core.quotePath=false keeps non-ASCII paths (e.g. Chinese) readable;
+        // --untracked-files=all lists files inside untracked dirs instead of
+        // collapsing them to a single "Assets/" entry.
+        let out = try await runner.run(["-c", "core.quotePath=false", "status", "--porcelain=v2", "--untracked-files=all"])
         var result: [WorkingFile] = []
         for raw in out.split(separator: "\n", omittingEmptySubsequences: true) {
             let line = String(raw)
