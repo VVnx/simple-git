@@ -252,6 +252,8 @@ final class AppStore: ObservableObject {
 
     func fetch() { perform("正在 Fetch…", success: "Fetch 完成") { try await $0.fetch() } }
 
+    func pull() { perform("正在 Pull…", success: "Pull 完成") { try await $0.pull() } }
+
     func push() {
         // Capture status on the main actor before handing work to the background.
         let current = status

@@ -76,14 +76,24 @@ struct RepoDetailView: View {
             } label: {
                 Label("Fetch", systemImage: "arrow.down.circle")
             }
-            .help("git fetch --all --prune")
+            .labelStyle(.titleAndIcon)
+            .help("git fetch --all --prune:只下载远程更新,不改动工作区")
+
+            Button {
+                store.pull()
+            } label: {
+                Label("Pull", systemImage: "arrow.down.to.line")
+            }
+            .labelStyle(.titleAndIcon)
+            .help("git pull:下载并合并到当前分支")
 
             Button {
                 store.push()
             } label: {
                 Label("Push", systemImage: "arrow.up.circle")
             }
-            .help("git push")
+            .labelStyle(.titleAndIcon)
+            .help("git push:推送当前分支(无 upstream 时自动 -u)")
 
             Menu {
                 if store.mergeableBranches.isEmpty {
@@ -100,6 +110,7 @@ struct RepoDetailView: View {
             } label: {
                 Label("Merge", systemImage: "arrow.triangle.merge")
             }
+            .labelStyle(.titleAndIcon)
             .help("把所选分支合并进当前分支")
 
             Button {
@@ -107,7 +118,9 @@ struct RepoDetailView: View {
             } label: {
                 Label("刷新", systemImage: "arrow.clockwise")
             }
+            .labelStyle(.titleAndIcon)
             .keyboardShortcut("r", modifiers: .command)
+            .help("重新读取仓库状态(⌘R)")
         }
     }
 }

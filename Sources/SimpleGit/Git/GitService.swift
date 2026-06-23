@@ -107,6 +107,8 @@ struct GitService {
 
     func fetch() async throws { try await runner.run(["fetch", "--all", "--prune"]) }
 
+    func pull() async throws { try await runner.run(["pull", "--no-edit"]) }
+
     func push() async throws { try await runner.run(["push"]) }
 
     func push(setUpstreamTo remote: String, branch: String) async throws {
