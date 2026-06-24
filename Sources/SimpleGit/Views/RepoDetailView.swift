@@ -104,6 +104,7 @@ struct RepoDetailView: View {
                 Label("Fetch", systemImage: "arrow.down.to.line")
             }
             .labelStyle(.titleAndIcon)
+            .disabled(store.isRepositoryOperationInProgress)
             .help("git fetch --all --prune:只下载远程更新,不改动工作区")
 
             Button {
@@ -112,6 +113,7 @@ struct RepoDetailView: View {
                 Label("Pull", systemImage: "arrow.down.circle")
             }
             .labelStyle(.titleAndIcon)
+            .disabled(store.isRepositoryOperationInProgress)
             .help("git pull:下载并合并到当前分支")
 
             Button {
@@ -120,6 +122,7 @@ struct RepoDetailView: View {
                 Label("Push", systemImage: "arrow.up.circle")
             }
             .labelStyle(.titleAndIcon)
+            .disabled(store.isRepositoryOperationInProgress)
             .help("git push:推送当前分支(无 upstream 时自动 -u)")
 
             Button {
@@ -128,7 +131,7 @@ struct RepoDetailView: View {
                 Label("Merge", systemImage: "arrow.triangle.merge")
             }
             .labelStyle(.titleAndIcon)
-            .disabled(store.selectedCommit == nil)
+            .disabled(store.isRepositoryOperationInProgress || store.selectedCommit == nil)
             .help(store.selectedCommit == nil
                   ? "先在下方点选一个提交,再合并到当前分支"
                   : "把所选提交合并到当前分支(会二次确认)")
@@ -140,6 +143,7 @@ struct RepoDetailView: View {
             }
             .labelStyle(.titleAndIcon)
             .keyboardShortcut("r", modifiers: .command)
+            .disabled(store.isRepositoryOperationInProgress)
             .help("重新读取仓库状态(⌘R)")
         }
     }

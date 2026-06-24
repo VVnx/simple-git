@@ -21,6 +21,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .disabled(store.isRepositoryOperationInProgress)
         .overlay {
             if store.repositories.isEmpty {
                 Text("还没有仓库\n点下方「添加仓库」")
@@ -49,6 +50,7 @@ struct SidebarView: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+                .disabled(store.isRepositoryOperationInProgress)
                 .help("添加仓库:打开本地或克隆 URL")
 
                 Spacer()
@@ -79,7 +81,10 @@ struct SidebarView: View {
     private var selectionBinding: Binding<Repository.ID?> {
         Binding(
             get: { store.selectedRepoID },
-            set: { store.select($0) }
+            set: {
+                guard !store.isRepositoryOperationInProgress else { return }
+                store.select($0)
+            }
         )
     }
 

@@ -16,6 +16,7 @@ struct GitService {
     private var runner: GitRunner { GitRunner(workingDirectory: path) }
 
     private static let unit = "\u{1f}"   // field separator inside a line
+    private static let remoteOperationTimeout: TimeInterval = 180
 
     // MARK: Validation
 
@@ -162,14 +163,20 @@ struct GitService {
 
     // MARK: Mutations
 
-    func fetch() async throws { try await runner.run(["fetch", "--all", "--prune"]) }
+    func fetch() async throws {
+        try await runner.run(["fetch", "--all", "--prune"], timeout: Self.remoteOperationTimeout)
+    }
 
-    func pull() async throws { try await runner.run(["pull", "--no-edit"]) }
+    func pull() async throws {
+        try await runner.run(["pull", "--no-edit"], timeout: Self.remoteOperationTimeout)
+    }
 
-    func push() async throws { try await runner.run(["push"]) }
+    func push() async throws {
+        try await runner.run(["push"], timeout: Self.remoteOperationTimeout)
+    }
 
     func push(setUpstreamTo remote: String, branch: String) async throws {
-        try await runner.run(["push", "--set-upstream", remote, branch])
+        try await runner.run(["push", "--set-upstream", remote, branch], timeout: Self.remoteOperationTimeout)
     }
 
     func merge(_ branch: String) async throws { try await runner.run(["merge", "--no-edit", branch]) }

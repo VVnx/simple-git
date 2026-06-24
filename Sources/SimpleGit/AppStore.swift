@@ -83,6 +83,10 @@ final class AppStore: ObservableObject {
 
     var isUncommittedSelected: Bool { selection == .uncommitted }
 
+    /// Mutating git operations lock the repository context until their final
+    /// refresh finishes, so late results cannot appear under another repo.
+    var isRepositoryOperationInProgress: Bool { busyMessage != nil }
+
     // MARK: - Persistence
 
     private func loadPersisted() {
@@ -101,6 +105,7 @@ final class AppStore: ObservableObject {
     // MARK: - Repository management
 
     func addRepository(at url: URL) {
+        guard !isRepositoryOperationInProgress else { return }
         Task {
             do {
                 let root = try await GitService.repoRoot(of: url.path)
@@ -121,6 +126,9 @@ final class AppStore: ObservableObject {
     /// Clones a remote repo into `parent`/<derived-name> and adds it. Throws so the
     /// clone sheet can show progress and surface failures inline.
     func cloneRepository(url: String, into parent: URL) async throws {
+        guard !isRepositoryOperationInProgress else {
+            throw SimpleGitError("当前 Git 操作完成前不能添加或切换仓库。")
+        }
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw SimpleGitError("请输入仓库 URL。") }
         let name = Self.deriveRepoName(from: trimmed)
@@ -152,6 +160,7 @@ final class AppStore: ObservableObject {
     }
 
     func removeRepository(_ repo: Repository) {
+        guard !isRepositoryOperationInProgress else { return }
         repositories.removeAll { $0.id == repo.id }
         persist()
         if selectedRepoID == repo.id {
@@ -167,9 +176,14 @@ final class AppStore: ObservableObject {
     }
 
     func select(_ id: Repository.ID?) {
+        guard !isRepositoryOperationInProgress else { return }
+        selectUnlocked(id)
+    }
+
+    private func selectUnlocked(_ id: Repository.ID?) {
         selectedRepoID = id
         clearSelection()
-        reload()
+        reloadUnlocked()
     }
 
     // MARK: - Graph row inspection
@@ -283,6 +297,11 @@ final class AppStore: ObservableObject {
     // MARK: - Loading
 
     func reload() {
+        guard !isRepositoryOperationInProgress else { return }
+        reloadUnlocked()
+    }
+
+    private func reloadUnlocked() {
         guard let repo = selectedRepo else {
             clearLoadedData()
             stopWatching()
@@ -313,7 +332,8 @@ final class AppStore: ObservableObject {
     /// the working-changes panel if that's the one open (a commit's file list is
     /// immutable, so it needs no refresh). Triggered by `RepoWatcher`.
     func refresh() {
-        reload()
+        guard !isRepositoryOperationInProgress else { return }
+        reloadUnlocked()
         if selection == .uncommitted {
             let keepFile = selectedFilePath
             selectUncommitted()
@@ -323,9 +343,11 @@ final class AppStore: ObservableObject {
 
     private func clearLoadedData() {
         nodes = []; laneCount = 1; refsByCommit = [:]; branches = []; status = nil
+        isLoading = false
     }
 
     private func load(repo: Repository, generation: Int) async {
+        guard selectedRepoID == repo.id else { return }
         isLoading = true
         let service = GitService(path: repo.path)
         do {
@@ -339,8 +361,9 @@ final class AppStore: ObservableObject {
             let statusVal = try await statusTask
             let commits = try await commitsTask
 
-            // Drop the result if a newer load has started for another repo.
-            guard generation == loadGeneration else { return }
+            // Drop the result if a newer load has started, or if the repo changed
+            // before this asynchronous read completed.
+            guard isCurrentLoad(repo: repo, generation: generation) else { return }
 
             var refsMap: [String: [Ref]] = [:]
             var branchList: [Branch] = []
@@ -387,11 +410,15 @@ final class AppStore: ObservableObject {
             laneCount = layout.laneCount
             isLoading = false
         } catch {
-            guard generation == loadGeneration else { return }
+            guard isCurrentLoad(repo: repo, generation: generation) else { return }
             clearLoadedData()
             errorMessage = loadErrorText(error, repo: repo)
             isLoading = false
         }
+    }
+
+    private func isCurrentLoad(repo: Repository, generation: Int) -> Bool {
+        generation == loadGeneration && selectedRepoID == repo.id
     }
 
     private func loadErrorText(_ error: Error, repo: Repository) -> String {
@@ -432,17 +459,20 @@ final class AppStore: ObservableObject {
     }
 
     private func perform(_ message: String, success: String, _ op: @escaping (GitService) async throws -> Void) {
+        guard !isRepositoryOperationInProgress else { return }
         guard let repo = selectedRepo else { return }
         let service = GitService(path: repo.path)
+        busyMessage = message
+        successMessage = nil
         Task {
-            busyMessage = message
-            successMessage = nil
             var succeeded = false
             do {
                 try await op(service)
                 succeeded = true
             } catch {
-                errorMessage = Self.friendlyGitMessage(error)
+                if selectedRepoID == repo.id {
+                    errorMessage = Self.friendlyGitMessage(error)
+                }
             }
             // Always refresh afterwards — even on failure — so a half-applied
             // action (e.g. a conflicted merge that left the tree MERGING) shows
@@ -451,8 +481,9 @@ final class AppStore: ObservableObject {
             let generation = loadGeneration
             await load(repo: repo, generation: generation)
 
+            let stillSelected = selectedRepoID == repo.id
             busyMessage = nil
-            if succeeded { flashSuccess(success) }
+            if succeeded && stillSelected { flashSuccess(success) }
         }
     }
 
@@ -461,6 +492,9 @@ final class AppStore: ObservableObject {
     /// stripped, so even unrecognized errors read more cleanly.
     static func friendlyGitMessage(_ error: Error) -> String {
         if let simple = error as? SimpleGitError { return simple.message }
+        if let timeout = error as? GitTimeoutError {
+            return "Git 操作超时:\(Int(timeout.timeout.rounded())) 秒内没有完成,已停止本次操作。请检查网络或远程仓库状态后重试。"
+        }
         let raw = (error as? GitError)?.message ?? error.localizedDescription
         let lower = raw.lowercased()
 

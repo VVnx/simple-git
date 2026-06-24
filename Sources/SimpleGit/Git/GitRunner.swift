@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 struct GitError: LocalizedError {
@@ -9,22 +10,32 @@ struct GitError: LocalizedError {
     }
 }
 
+struct GitTimeoutError: LocalizedError {
+    let command: String
+    let timeout: TimeInterval
+
+    var errorDescription: String? {
+        "\(command) 超时(\(Int(timeout.rounded())) 秒)"
+    }
+}
+
 /// Thin async wrapper around the `git` executable.
 struct GitRunner {
     let workingDirectory: String
 
     @discardableResult
-    func run(_ args: [String], allowNonZero: Bool = false) async throws -> String {
-        try await GitRunner.run(args, in: workingDirectory, allowNonZero: allowNonZero)
+    func run(_ args: [String], allowNonZero: Bool = false, timeout: TimeInterval? = nil) async throws -> String {
+        try await GitRunner.run(args, in: workingDirectory, allowNonZero: allowNonZero, timeout: timeout)
     }
 
     /// Runs `git args...`. `directory` is the working directory (nil to inherit;
     /// callers that need a specific repo usually pass `-C <path>` in `args`).
     /// `allowNonZero` returns stdout instead of throwing on a non-zero exit —
     /// useful for `git diff --no-index`, which exits 1 when files differ.
-    static func run(_ args: [String], in directory: String?, allowNonZero: Bool = false) async throws -> String {
+    static func run(_ args: [String], in directory: String?, allowNonZero: Bool = false, timeout: TimeInterval? = nil) async throws -> String {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
             DispatchQueue.global(qos: .userInitiated).async {
+                let command = "git " + args.joined(separator: " ")
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
                 process.arguments = ["git"] + args
@@ -46,6 +57,8 @@ struct GitRunner {
                 let errPipe = Pipe()
                 process.standardOutput = outPipe
                 process.standardError = errPipe
+                let exitSemaphore = DispatchSemaphore(value: 0)
+                process.terminationHandler = { _ in exitSemaphore.signal() }
 
                 // Drain both pipes concurrently to avoid a deadlock when one fills
                 // its buffer while we're blocked reading the other.
@@ -75,18 +88,38 @@ struct GitRunner {
                     return
                 }
 
-                process.waitUntilExit()
+                let timedOut: Bool
+                if let timeout {
+                    timedOut = exitSemaphore.wait(timeout: .now() + timeout) == .timedOut
+                    if timedOut {
+                        if process.isRunning { process.terminate() }
+                        if exitSemaphore.wait(timeout: .now() + 2) == .timedOut, process.isRunning {
+                            Darwin.kill(process.processIdentifier, SIGKILL)
+                            _ = exitSemaphore.wait(timeout: .now() + 1)
+                        }
+                    }
+                } else {
+                    exitSemaphore.wait()
+                    timedOut = false
+                }
+
+                if timedOut {
+                    try? outPipe.fileHandleForReading.close()
+                    try? errPipe.fileHandleForReading.close()
+                }
                 group.wait()
 
                 let out = String(decoding: outData, as: UTF8.self)
                 let err = String(decoding: errData, as: UTF8.self)
 
-                if process.terminationStatus == 0 || allowNonZero {
+                if timedOut {
+                    cont.resume(throwing: GitTimeoutError(command: command, timeout: timeout ?? 0))
+                } else if process.terminationStatus == 0 || allowNonZero {
                     cont.resume(returning: out)
                 } else {
                     let raw = err.isEmpty ? out : err
                     cont.resume(throwing: GitError(
-                        command: "git " + args.joined(separator: " "),
+                        command: command,
                         exitCode: process.terminationStatus,
                         message: raw.trimmingCharacters(in: .whitespacesAndNewlines)
                     ))
