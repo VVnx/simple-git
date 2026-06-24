@@ -236,12 +236,17 @@ final class AppStore: ObservableObject {
     }
 
     func refreshRepository(_ repo: Repository) {
-        guard !isRepositorySelectionLocked else { return }
+        guard !isRepositoryOperationInProgress else { return }
         if selectedRepoID == repo.id {
-            reloadUnlocked()
+            refreshCurrentRepository()
         } else {
             selectUnlocked(repo.id)
+            refreshCurrentRepository()
         }
+    }
+
+    func refreshCurrentRepository() {
+        perform("正在刷新…", success: "刷新完成") { try await $0.fetch() }
     }
 
     private func selectUnlocked(_ id: Repository.ID?) {

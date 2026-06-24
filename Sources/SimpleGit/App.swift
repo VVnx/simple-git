@@ -15,7 +15,7 @@ struct SimpleGitApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             CommandGroup(after: .toolbar) {
-                Button("刷新") { store.reload() }
+                Button("刷新") { store.refreshCurrentRepository() }
                     .keyboardShortcut("r", modifiers: .command)
                     .disabled(store.isRepositoryOperationInProgress)
             }

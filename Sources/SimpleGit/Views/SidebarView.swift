@@ -48,12 +48,11 @@ struct SidebarView: View {
                         Label("克隆 URL…", systemImage: "arrow.down.doc")
                     }
                 } label: {
-                    Image(systemName: "plus.circle")
-                        .imageScale(.large)
+                    SidebarFooterIcon(systemName: "plus.circle")
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
-                .fixedSize()
+                .frame(width: SidebarFooterIcon.size, height: SidebarFooterIcon.size)
                 .disabled(store.isRepositoryOperationInProgress)
                 .help("添加仓库:打开本地或克隆 URL")
 
@@ -62,12 +61,12 @@ struct SidebarView: View {
                 Button {
                     store.fetchActiveRepositories()
                 } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .imageScale(.large)
+                    SidebarFooterIcon(systemName: "arrow.triangle.2.circlepath")
                 }
                 .buttonStyle(.borderless)
+                .frame(width: SidebarFooterIcon.size, height: SidebarFooterIcon.size)
                 .disabled(store.isRepositoryOperationInProgress || store.activeRepositories.isEmpty)
-                .help("Fetch Active 仓库")
+                .help("刷新 Active 仓库:fetch 并读取最新状态")
             }
             .padding(10)
         }
@@ -166,6 +165,19 @@ struct SidebarView: View {
 
     private func revealInFinder(_ repo: Repository) {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: repo.path)])
+    }
+}
+
+private struct SidebarFooterIcon: View {
+    static let size: CGFloat = 28
+
+    let systemName: String
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 16, weight: .medium))
+            .frame(width: Self.size, height: Self.size)
+            .contentShape(Rectangle())
     }
 }
 
