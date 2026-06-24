@@ -540,7 +540,10 @@ final class AppStore: ObservableObject {
     func fetchActiveRepositories() {
         guard !isRepositoryOperationInProgress else { return }
         let repos = activeRepositories
-        guard !repos.isEmpty else { return }
+        guard !repos.isEmpty else {
+            flashSuccess("没有 Active 仓库")
+            return
+        }
 
         isFetchingActive = true
         busyMessage = "正在 Fetch Active…"

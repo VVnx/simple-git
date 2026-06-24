@@ -65,7 +65,6 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.borderless)
                 .frame(width: SidebarFooterIcon.size, height: SidebarFooterIcon.size)
-                .disabled(store.isRepositoryOperationInProgress || store.activeRepositories.isEmpty)
                 .help("刷新 Active 仓库:fetch 并读取最新状态")
             }
             .padding(10)
@@ -177,7 +176,7 @@ private struct SidebarFooterIcon: View {
     var body: some View {
         Image(systemName: systemName)
             .font(.system(size: pointSize, weight: .regular))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.primary)
             .frame(width: Self.size, height: Self.size)
             .contentShape(Rectangle())
     }
