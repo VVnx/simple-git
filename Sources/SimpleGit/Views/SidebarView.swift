@@ -48,7 +48,7 @@ struct SidebarView: View {
                         Label("克隆 URL…", systemImage: "arrow.down.doc")
                     }
                 } label: {
-                    SidebarFooterIcon(systemName: "plus.circle")
+                    SidebarFooterIcon(systemName: "plus")
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -61,7 +61,7 @@ struct SidebarView: View {
                 Button {
                     store.fetchActiveRepositories()
                 } label: {
-                    SidebarFooterIcon(systemName: "arrow.triangle.2.circlepath")
+                    SidebarFooterIcon(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.borderless)
                 .frame(width: SidebarFooterIcon.size, height: SidebarFooterIcon.size)
@@ -174,9 +174,14 @@ private struct SidebarFooterIcon: View {
     let systemName: String
 
     var body: some View {
-        Image(systemName: systemName)
-            .font(.system(size: 16, weight: .medium))
-            .frame(width: Self.size, height: Self.size)
+        ZStack {
+            Circle()
+                .strokeBorder(.secondary.opacity(0.85), lineWidth: 1.6)
+            Image(systemName: systemName)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+        .frame(width: Self.size, height: Self.size)
             .contentShape(Rectangle())
     }
 }
