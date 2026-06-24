@@ -7,6 +7,9 @@ final class AppStore: ObservableObject {
     // Repositories & selection
     @Published var repositories: [Repository] = []
     @Published var selectedRepoID: Repository.ID?
+    @Published private(set) var sidebarStatuses: [Repository.ID: RepoSidebarStatus] = [:]
+    @Published private(set) var isFetchingActive = false
+    private var sidebarStatusGenerations: [Repository.ID: Int] = [:]
 
     // Loaded data for the selected repo
     @Published private(set) var nodes: [CommitNode] = []
@@ -65,9 +68,9 @@ final class AppStore: ObservableObject {
         }
     }
 
-    var selectedRepo: Repository? {
-        repositories.first { $0.id == selectedRepoID }
-    }
+    var selectedRepo: Repository? { repositories.first { $0.id == selectedRepoID } }
+    var activeRepositories: [Repository] { repositories(in: .active) }
+    var inactiveRepositories: [Repository] { repositories(in: .inactive) }
 
     /// Branches the user can merge into the current one (everything but HEAD).
     var mergeableBranches: [Branch] {
@@ -85,7 +88,7 @@ final class AppStore: ObservableObject {
 
     /// Mutating git operations lock the repository context until their final
     /// refresh finishes, so late results cannot appear under another repo.
-    var isRepositoryOperationInProgress: Bool { busyMessage != nil }
+    var isRepositoryOperationInProgress: Bool { busyMessage != nil || isFetchingActive }
 
     // MARK: - Persistence
 
@@ -100,6 +103,10 @@ final class AppStore: ObservableObject {
         if let data = try? JSONEncoder().encode(repositories) {
             UserDefaults.standard.set(data, forKey: defaultsKey)
         }
+    }
+
+    func repositories(in group: RepositoryGroup) -> [Repository] {
+        repositories.filter { $0.group == group }
     }
 
     // MARK: - Repository management
@@ -162,6 +169,8 @@ final class AppStore: ObservableObject {
     func removeRepository(_ repo: Repository) {
         guard !isRepositoryOperationInProgress else { return }
         repositories.removeAll { $0.id == repo.id }
+        sidebarStatuses[repo.id] = nil
+        sidebarStatusGenerations[repo.id] = nil
         persist()
         if selectedRepoID == repo.id {
             select(repositories.first?.id)
@@ -173,6 +182,51 @@ final class AppStore: ObservableObject {
         guard let idx = repositories.firstIndex(where: { $0.id == repo.id }) else { return }
         repositories[idx].masked.toggle()
         persist()
+    }
+
+    func moveRepository(_ repoID: Repository.ID, to group: RepositoryGroup, before targetID: Repository.ID?) {
+        guard let sourceIndex = repositories.firstIndex(where: { $0.id == repoID }) else { return }
+        let original = repositories
+        let oldGroup = original[sourceIndex].group
+        if oldGroup == group && targetID == repoID { return }
+
+        var remaining = original
+        var moving = remaining.remove(at: sourceIndex)
+        moving.group = group
+
+        var active = remaining.filter { $0.group == .active }
+        var inactive = remaining.filter { $0.group == .inactive }
+        if group == .active {
+            insert(moving, before: targetID, into: &active)
+        } else {
+            insert(moving, before: targetID, into: &inactive)
+        }
+
+        let updated = active + inactive
+        guard updated != original else { return }
+        repositories = updated
+        persist()
+
+        if oldGroup != group {
+            if group == .active {
+                refreshSidebarStatus(for: moving)
+            } else {
+                sidebarStatuses[repoID] = nil
+                sidebarStatusGenerations[repoID] = nil
+            }
+        }
+    }
+
+    func moveRepository(_ repo: Repository, to group: RepositoryGroup) {
+        moveRepository(repo.id, to: group, before: nil)
+    }
+
+    private func insert(_ repo: Repository, before targetID: Repository.ID?, into repos: inout [Repository]) {
+        if let targetID, let targetIndex = repos.firstIndex(where: { $0.id == targetID }) {
+            repos.insert(repo, at: targetIndex)
+        } else {
+            repos.append(repo)
+        }
     }
 
     func select(_ id: Repository.ID?) {
@@ -406,13 +460,16 @@ final class AppStore: ObservableObject {
             refsByCommit = refsMap
             branches = branchList.sorted { $0.name < $1.name }
             status = statusVal
+            publishSidebarStatus(statusVal, for: repo)
             nodes = layout.nodes
             laneCount = layout.laneCount
             isLoading = false
         } catch {
             guard isCurrentLoad(repo: repo, generation: generation) else { return }
             clearLoadedData()
-            errorMessage = loadErrorText(error, repo: repo)
+            let text = loadErrorText(error, repo: repo)
+            publishSidebarError(text, for: repo)
+            errorMessage = text
             isLoading = false
         }
     }
@@ -426,6 +483,117 @@ final class AppStore: ObservableObject {
             return "仓库路径不存在或已被移动:\n\(repo.path)"
         }
         return "无法读取仓库「\(repo.displayName)」:\n\(error.localizedDescription)"
+    }
+
+    // MARK: - Sidebar status / batch fetch
+
+    func refreshActiveSidebarStatuses() {
+        let activeIDs = Set(activeRepositories.map(\.id))
+        sidebarStatuses = sidebarStatuses.filter { activeIDs.contains($0.key) }
+        sidebarStatusGenerations = sidebarStatusGenerations.filter { activeIDs.contains($0.key) }
+
+        for repo in activeRepositories {
+            refreshSidebarStatus(for: repo)
+        }
+    }
+
+    func refreshSidebarStatus(for repo: Repository) {
+        guard repositoryIsActive(repo.id) else {
+            sidebarStatuses[repo.id] = nil
+            sidebarStatusGenerations[repo.id] = nil
+            return
+        }
+
+        let generation = bumpSidebarStatusGeneration(for: repo.id)
+        sidebarStatuses[repo.id] = .loading(from: sidebarStatuses[repo.id])
+        let service = GitService(path: repo.path)
+        Task {
+            do {
+                let statusVal = try await service.status()
+                guard isCurrentSidebarStatusLoad(repo.id, generation: generation),
+                      repositoryIsActive(repo.id) else { return }
+                sidebarStatuses[repo.id] = RepoSidebarStatus(status: statusVal)
+            } catch {
+                guard isCurrentSidebarStatusLoad(repo.id, generation: generation),
+                      repositoryIsActive(repo.id) else { return }
+                sidebarStatuses[repo.id] = .failed(Self.friendlyGitMessage(error),
+                                                   previous: sidebarStatuses[repo.id])
+            }
+        }
+    }
+
+    func fetchActiveRepositories() {
+        guard !isRepositoryOperationInProgress else { return }
+        let repos = activeRepositories
+        guard !repos.isEmpty else { return }
+
+        isFetchingActive = true
+        busyMessage = "正在 Fetch Active…"
+        successMessage = nil
+
+        Task {
+            var failureCount = 0
+            for repo in repos {
+                guard repositoryIsActive(repo.id) else { continue }
+                let generation = bumpSidebarStatusGeneration(for: repo.id)
+                sidebarStatuses[repo.id] = .loading(from: sidebarStatuses[repo.id])
+                let service = GitService(path: repo.path)
+
+                do {
+                    try await service.fetch()
+                    let statusVal = try await service.status()
+                    guard isCurrentSidebarStatusLoad(repo.id, generation: generation),
+                          repositoryIsActive(repo.id) else { continue }
+                    sidebarStatuses[repo.id] = RepoSidebarStatus(status: statusVal)
+
+                    if selectedRepoID == repo.id {
+                        loadGeneration += 1
+                        let generation = loadGeneration
+                        await load(repo: repo, generation: generation)
+                    }
+                } catch {
+                    failureCount += 1
+                    guard isCurrentSidebarStatusLoad(repo.id, generation: generation),
+                          repositoryIsActive(repo.id) else { continue }
+                    sidebarStatuses[repo.id] = .failed(Self.friendlyGitMessage(error),
+                                                       previous: sidebarStatuses[repo.id])
+                }
+            }
+
+            isFetchingActive = false
+            busyMessage = nil
+            if failureCount == 0 {
+                flashSuccess("Active Fetch 完成")
+            } else {
+                flashSuccess("Active Fetch 完成,\(failureCount) 个失败")
+            }
+        }
+    }
+
+    private func publishSidebarStatus(_ status: RepoStatus, for repo: Repository) {
+        guard repositoryIsActive(repo.id) else { return }
+        _ = bumpSidebarStatusGeneration(for: repo.id)
+        sidebarStatuses[repo.id] = RepoSidebarStatus(status: status)
+    }
+
+    private func publishSidebarError(_ text: String, for repo: Repository) {
+        guard repositoryIsActive(repo.id) else { return }
+        _ = bumpSidebarStatusGeneration(for: repo.id)
+        sidebarStatuses[repo.id] = .failed(text, previous: sidebarStatuses[repo.id])
+    }
+
+    private func bumpSidebarStatusGeneration(for id: Repository.ID) -> Int {
+        let generation = (sidebarStatusGenerations[id] ?? 0) + 1
+        sidebarStatusGenerations[id] = generation
+        return generation
+    }
+
+    private func isCurrentSidebarStatusLoad(_ id: Repository.ID, generation: Int) -> Bool {
+        sidebarStatusGenerations[id] == generation
+    }
+
+    private func repositoryIsActive(_ id: Repository.ID) -> Bool {
+        repositories.first { $0.id == id }?.group == .active
     }
 
     // MARK: - Actions

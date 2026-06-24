@@ -13,6 +13,7 @@ struct ContentView: View {
         .task {
             // Reload the repo restored from the last session, once.
             if store.selectedRepoID != nil { store.reload() }
+            store.refreshActiveSidebarStatuses()
         }
         .alert(
             "出错了",

@@ -9,6 +9,18 @@ struct SimpleGitError: LocalizedError {
 
 // MARK: - Repository
 
+enum RepositoryGroup: String, Codable, CaseIterable {
+    case active
+    case inactive
+
+    var title: String {
+        switch self {
+        case .active: return "Active"
+        case .inactive: return "Inactive"
+        }
+    }
+}
+
 /// A tracked repository. `path` is the absolute path to the repo root and is
 /// used as the stable identity.
 struct Repository: Identifiable, Codable, Hashable {
@@ -16,6 +28,8 @@ struct Repository: Identifiable, Codable, Hashable {
     var path: String
     /// When true, the name is shown masked in the UI (privacy / screenshots).
     var masked: Bool = false
+    /// Active repos participate in sidebar status refreshes and batch fetches.
+    var group: RepositoryGroup = .active
 
     var id: String { path }
 
@@ -29,19 +43,21 @@ struct Repository: Identifiable, Codable, Hashable {
         return "\(chars.first!)•••\(chars.last!)"
     }
 
-    init(name: String, path: String, masked: Bool = false) {
+    init(name: String, path: String, masked: Bool = false, group: RepositoryGroup = .active) {
         self.name = name
         self.path = path
         self.masked = masked
+        self.group = group
     }
 
-    // Decode tolerantly so repos persisted before `masked` existed still load.
-    enum CodingKeys: String, CodingKey { case name, path, masked }
+    // Decode tolerantly so repos persisted before newer fields existed still load.
+    enum CodingKeys: String, CodingKey { case name, path, masked, group }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         name = try c.decode(String.self, forKey: .name)
         path = try c.decode(String.self, forKey: .path)
         masked = try c.decodeIfPresent(Bool.self, forKey: .masked) ?? false
+        group = try c.decodeIfPresent(RepositoryGroup.self, forKey: .group) ?? .active
     }
 }
 
@@ -94,6 +110,63 @@ struct RepoStatus {
     var upstream: String?
     var oid: String?           // HEAD commit hash ("(initial)" on an unborn branch)
     var clean: Bool { changedCount == 0 && untrackedCount == 0 }
+}
+
+struct RepoSidebarStatus {
+    var branch: String
+    var ahead: Int
+    var behind: Int
+    var hasChanges: Bool
+    var upstream: String?
+    var isLoading: Bool = false
+    var errorMessage: String?
+
+    var hasUpstream: Bool { upstream != nil }
+
+    init(branch: String, ahead: Int, behind: Int, hasChanges: Bool,
+         upstream: String?, isLoading: Bool = false, errorMessage: String? = nil) {
+        self.branch = branch
+        self.ahead = ahead
+        self.behind = behind
+        self.hasChanges = hasChanges
+        self.upstream = upstream
+        self.isLoading = isLoading
+        self.errorMessage = errorMessage
+    }
+
+    init(status: RepoStatus) {
+        branch = status.branch
+        ahead = status.ahead
+        behind = status.behind
+        hasChanges = !status.clean
+        upstream = status.upstream
+        isLoading = false
+        errorMessage = nil
+    }
+
+    static func loading(from previous: RepoSidebarStatus?) -> RepoSidebarStatus {
+        RepoSidebarStatus(
+            branch: previous?.branch ?? "",
+            ahead: previous?.ahead ?? 0,
+            behind: previous?.behind ?? 0,
+            hasChanges: previous?.hasChanges ?? false,
+            upstream: previous?.upstream,
+            isLoading: true,
+            errorMessage: nil
+        )
+    }
+
+    static func failed(_ message: String, previous: RepoSidebarStatus?) -> RepoSidebarStatus {
+        RepoSidebarStatus(
+            branch: previous?.branch ?? "",
+            ahead: previous?.ahead ?? 0,
+            behind: previous?.behind ?? 0,
+            hasChanges: previous?.hasChanges ?? false,
+            upstream: previous?.upstream,
+            isLoading: false,
+            errorMessage: message
+        )
+    }
 }
 
 // MARK: - Graph layout model
