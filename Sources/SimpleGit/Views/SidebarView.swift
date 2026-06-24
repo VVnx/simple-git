@@ -48,7 +48,7 @@ struct SidebarView: View {
                         Label("克隆 URL…", systemImage: "arrow.down.doc")
                     }
                 } label: {
-                    SidebarFooterIcon(systemName: "plus", pointSize: 18)
+                    SidebarFooterIcon(systemName: "plus", pointSize: 18, weight: .regular)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -61,9 +61,9 @@ struct SidebarView: View {
                 Button {
                     store.fetchActiveRepositories()
                 } label: {
-                    SidebarFooterIcon(systemName: "arrow.clockwise", pointSize: 16)
+                    SidebarFooterIcon(systemName: "arrow.clockwise", pointSize: 17, weight: .medium)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .frame(width: SidebarFooterIcon.size, height: SidebarFooterIcon.size)
                 .help("刷新 Active 仓库:fetch 并读取最新状态")
             }
@@ -172,11 +172,13 @@ private struct SidebarFooterIcon: View {
 
     let systemName: String
     let pointSize: CGFloat
+    let weight: Font.Weight
 
     var body: some View {
         Image(systemName: systemName)
-            .font(.system(size: pointSize, weight: .regular))
-            .foregroundStyle(.primary)
+            .symbolRenderingMode(.monochrome)
+            .font(.system(size: pointSize, weight: weight))
+            .foregroundColor(Color(nsColor: .labelColor))
             .frame(width: Self.size, height: Self.size)
             .contentShape(Rectangle())
     }
