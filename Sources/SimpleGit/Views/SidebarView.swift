@@ -112,6 +112,7 @@ struct SidebarView: View {
                     status: group == .active ? store.sidebarStatuses[repo.id] : nil,
                     showsStatus: group == .active,
                     onSelect: { store.select(repo.id) },
+                    onRefresh: { store.refreshRepository(repo) },
                     onOpen: { revealInFinder(repo) },
                     onToggleMask: { store.toggleMask(repo) },
                     onMoveToGroup: { store.moveRepository(repo, to: group == .active ? .inactive : .active) },
@@ -175,6 +176,7 @@ private struct RepoRow: View {
     let status: RepoSidebarStatus?
     let showsStatus: Bool
     let onSelect: () -> Void
+    let onRefresh: () -> Void
     let onOpen: () -> Void
     let onToggleMask: () -> Void
     let onMoveToGroup: () -> Void
@@ -205,6 +207,8 @@ private struct RepoRow: View {
         .onHover { hovering = $0 }
         .help(repo.masked ? "已隐藏名称" : repo.path)
         .contextMenu {
+            Button("刷新") { onRefresh() }
+            Divider()
             Button("在 Finder 中显示") { onOpen() }
             Button(repo.masked ? "显示名称" : "隐藏名称") { onToggleMask() }
             Button("移到 \(repo.group == .active ? RepositoryGroup.inactive.title : RepositoryGroup.active.title)") {

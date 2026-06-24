@@ -135,16 +135,6 @@ struct RepoDetailView: View {
             .help(store.selectedCommit == nil
                   ? "先在下方点选一个提交,再合并到当前分支"
                   : "把所选提交合并到当前分支(会二次确认)")
-
-            Button {
-                store.reload()
-            } label: {
-                Label("刷新", systemImage: "arrow.clockwise")
-            }
-            .labelStyle(.titleAndIcon)
-            .keyboardShortcut("r", modifiers: .command)
-            .disabled(store.isRepositoryOperationInProgress)
-            .help("重新读取仓库状态(⌘R)")
         }
     }
 }

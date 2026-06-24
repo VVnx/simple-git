@@ -235,6 +235,15 @@ final class AppStore: ObservableObject {
         selectUnlocked(id)
     }
 
+    func refreshRepository(_ repo: Repository) {
+        guard !isRepositorySelectionLocked else { return }
+        if selectedRepoID == repo.id {
+            reloadUnlocked()
+        } else {
+            selectUnlocked(repo.id)
+        }
+    }
+
     private func selectUnlocked(_ id: Repository.ID?) {
         selectedRepoID = id
         clearSelection()
