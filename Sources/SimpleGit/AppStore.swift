@@ -89,6 +89,7 @@ final class AppStore: ObservableObject {
     /// Mutating git operations lock the repository context until their final
     /// refresh finishes, so late results cannot appear under another repo.
     var isRepositoryOperationInProgress: Bool { busyMessage != nil || isFetchingActive }
+    var isRepositorySelectionLocked: Bool { busyMessage != nil && !isFetchingActive }
 
     // MARK: - Persistence
 
@@ -230,7 +231,7 @@ final class AppStore: ObservableObject {
     }
 
     func select(_ id: Repository.ID?) {
-        guard !isRepositoryOperationInProgress else { return }
+        guard !isRepositorySelectionLocked else { return }
         selectUnlocked(id)
     }
 

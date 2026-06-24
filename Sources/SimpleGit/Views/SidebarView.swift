@@ -25,7 +25,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .disabled(store.isRepositoryOperationInProgress)
+        .disabled(store.isRepositorySelectionLocked)
         .overlay {
             if store.repositories.isEmpty {
                 Text("还没有仓库\n点下方「添加仓库」")
@@ -111,6 +111,7 @@ struct SidebarView: View {
                     repo: repo,
                     status: group == .active ? store.sidebarStatuses[repo.id] : nil,
                     showsStatus: group == .active,
+                    onSelect: { store.select(repo.id) },
                     onOpen: { revealInFinder(repo) },
                     onToggleMask: { store.toggleMask(repo) },
                     onMoveToGroup: { store.moveRepository(repo, to: group == .active ? .inactive : .active) },
@@ -144,7 +145,7 @@ struct SidebarView: View {
         Binding(
             get: { store.selectedRepoID },
             set: {
-                guard !store.isRepositoryOperationInProgress else { return }
+                guard !store.isRepositorySelectionLocked else { return }
                 store.select($0)
             }
         )
@@ -173,6 +174,7 @@ private struct RepoRow: View {
     let repo: Repository
     let status: RepoSidebarStatus?
     let showsStatus: Bool
+    let onSelect: () -> Void
     let onOpen: () -> Void
     let onToggleMask: () -> Void
     let onMoveToGroup: () -> Void
@@ -199,6 +201,7 @@ private struct RepoRow: View {
             }
         }
         .contentShape(Rectangle())
+        .onTapGesture(perform: onSelect)
         .onHover { hovering = $0 }
         .help(repo.masked ? "已隐藏名称" : repo.path)
         .contextMenu {
