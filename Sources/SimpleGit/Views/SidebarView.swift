@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct SidebarView: View {
     @EnvironmentObject var store: AppStore
     @State private var showCloneSheet = false
+    @State private var showAddMenu = false
     @State private var repoPendingRemoval: Repository?
     @State private var draggingRepoID: Repository.ID?
 
@@ -36,35 +37,35 @@ struct SidebarView: View {
         }
         .safeAreaInset(edge: .bottom) {
             HStack {
-                Menu {
-                    Button {
-                        addLocalRepo()
-                    } label: {
-                        Label("打开本地仓库…", systemImage: "folder")
-                    }
-                    Button {
-                        showCloneSheet = true
-                    } label: {
-                        Label("克隆 URL…", systemImage: "arrow.down.doc")
-                    }
+                Button {
+                    showAddMenu.toggle()
                 } label: {
-                    SidebarFooterIcon(systemName: "plus", pointSize: 18, weight: .regular)
+                    SidebarFooterIcon(systemName: "plus")
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .frame(width: SidebarFooterIcon.size, height: SidebarFooterIcon.size)
+                .buttonStyle(SidebarFooterButtonStyle())
                 .disabled(store.isRepositoryOperationInProgress)
                 .help("添加仓库:打开本地或克隆 URL")
+                .popover(isPresented: $showAddMenu, arrowEdge: .bottom) {
+                    AddRepositoryPopover(
+                        onOpenLocal: {
+                            showAddMenu = false
+                            addLocalRepo()
+                        },
+                        onClone: {
+                            showAddMenu = false
+                            showCloneSheet = true
+                        }
+                    )
+                }
 
                 Spacer()
 
                 Button {
                     store.fetchActiveRepositories()
                 } label: {
-                    SidebarFooterIcon(systemName: "arrow.clockwise", pointSize: 17, weight: .medium)
+                    SidebarFooterIcon(systemName: "arrow.clockwise")
                 }
-                .buttonStyle(.plain)
-                .frame(width: SidebarFooterIcon.size, height: SidebarFooterIcon.size)
+                .buttonStyle(SidebarFooterButtonStyle())
                 .help("刷新 Active 仓库:fetch 并读取最新状态")
             }
             .padding(10)
@@ -171,16 +172,53 @@ private struct SidebarFooterIcon: View {
     static let size: CGFloat = 28
 
     let systemName: String
-    let pointSize: CGFloat
-    let weight: Font.Weight
 
     var body: some View {
         Image(systemName: systemName)
             .symbolRenderingMode(.monochrome)
-            .font(.system(size: pointSize, weight: weight))
+            .font(.system(size: 17, weight: .regular))
             .foregroundColor(Color(nsColor: .labelColor))
             .frame(width: Self.size, height: Self.size)
             .contentShape(Rectangle())
+    }
+}
+
+private struct SidebarFooterButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: SidebarFooterIcon.size, height: SidebarFooterIcon.size)
+            .opacity(configuration.isPressed ? 0.55 : 1)
+    }
+}
+
+private struct AddRepositoryPopover: View {
+    let onOpenLocal: () -> Void
+    let onClone: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            AddRepositoryAction(title: "打开本地仓库…", systemImage: "folder", action: onOpenLocal)
+            AddRepositoryAction(title: "克隆 URL…", systemImage: "arrow.down.doc", action: onClone)
+        }
+        .padding(8)
+        .frame(width: 180, alignment: .leading)
+    }
+}
+
+private struct AddRepositoryAction: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
