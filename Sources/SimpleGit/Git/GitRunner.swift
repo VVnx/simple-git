@@ -32,99 +32,144 @@ struct GitRunner {
     /// callers that need a specific repo usually pass `-C <path>` in `args`).
     /// `allowNonZero` returns stdout instead of throwing on a non-zero exit —
     /// useful for `git diff --no-index`, which exits 1 when files differ.
+    ///
+    /// Fully non-blocking: the pipes are drained via `readabilityHandler` and the
+    /// process is awaited via `terminationHandler`, so no thread is ever parked on
+    /// a `wait()`. This matters because the app fires several git reads per reload
+    /// (refs + status + log) and FSEvents can stack reloads — an implementation
+    /// that blocks a GCD worker per call would exhaust the global thread pool,
+    /// leaving no thread to drain the pipes, so git blocks forever writing to a
+    /// full stdout pipe and the whole UI wedges. Holding no threads avoids that.
     static func run(_ args: [String], in directory: String?, allowNonZero: Bool = false, timeout: TimeInterval? = nil) async throws -> String {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let command = "git " + args.joined(separator: " ")
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                process.arguments = ["git"] + args
-                if let directory {
-                    process.currentDirectoryURL = URL(fileURLWithPath: directory)
+        let command = "git " + args.joined(separator: " ")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["git"] + args
+        if let directory {
+            process.currentDirectoryURL = URL(fileURLWithPath: directory)
+        }
+
+        // A GUI app launched from Finder/Xcode has a minimal PATH, so make sure
+        // the common git locations are reachable. Also disable any interactive
+        // prompting so a credential request can't hang the UI.
+        var env = ProcessInfo.processInfo.environment
+        let extraPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        env["PATH"] = env["PATH"].map { "\(extraPath):\($0)" } ?? extraPath
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        env["GIT_OPTIONAL_LOCKS"] = "0"
+        process.environment = env
+
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
+
+        // All mutable state is confined to this serial queue, so the pipe handlers,
+        // the termination handler and the timeout fire without racing.
+        let stateQueue = DispatchQueue(label: "git.run.state")
+        var outData = Data()
+        var errData = Data()
+        var outDone = false
+        var errDone = false
+        var exited = false
+        var timedOut = false
+        var finished = false
+
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
+                // Resume the continuation exactly once, after the process has exited
+                // (or timed out) AND both pipes have reached EOF — so we never drop
+                // buffered output. Must be called on `stateQueue`.
+                func finishIfReady() {
+                    guard !finished else { return }
+                    guard timedOut || (exited && outDone && errDone) else { return }
+                    finished = true
+
+                    outPipe.fileHandleForReading.readabilityHandler = nil
+                    errPipe.fileHandleForReading.readabilityHandler = nil
+
+                    if timedOut {
+                        cont.resume(throwing: GitTimeoutError(command: command, timeout: timeout ?? 0))
+                        return
+                    }
+                    let out = String(decoding: outData, as: UTF8.self)
+                    let err = String(decoding: errData, as: UTF8.self)
+                    if process.terminationStatus == 0 || allowNonZero {
+                        cont.resume(returning: out)
+                    } else {
+                        let raw = err.isEmpty ? out : err
+                        cont.resume(throwing: GitError(
+                            command: command,
+                            exitCode: process.terminationStatus,
+                            message: raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                        ))
+                    }
                 }
 
-                // A GUI app launched from Finder/Xcode has a minimal PATH, so make
-                // sure the common git locations are reachable. Also disable any
-                // interactive prompting so a credential request can't hang the UI.
-                var env = ProcessInfo.processInfo.environment
-                let extraPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-                env["PATH"] = env["PATH"].map { "\(extraPath):\($0)" } ?? extraPath
-                env["GIT_TERMINAL_PROMPT"] = "0"
-                env["GIT_OPTIONAL_LOCKS"] = "0"
-                process.environment = env
-
-                let outPipe = Pipe()
-                let errPipe = Pipe()
-                process.standardOutput = outPipe
-                process.standardError = errPipe
-                let exitSemaphore = DispatchSemaphore(value: 0)
-                process.terminationHandler = { _ in exitSemaphore.signal() }
-
-                // Drain both pipes concurrently to avoid a deadlock when one fills
-                // its buffer while we're blocked reading the other.
-                var outData = Data()
-                var errData = Data()
-                let group = DispatchGroup()
-                let readQueue = DispatchQueue(label: "git.pipe.read", attributes: .concurrent)
-                group.enter()
-                readQueue.async {
-                    outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-                    group.leave()
+                outPipe.fileHandleForReading.readabilityHandler = { handle in
+                    let chunk = handle.availableData
+                    stateQueue.async {
+                        if chunk.isEmpty {
+                            outDone = true
+                            handle.readabilityHandler = nil
+                            finishIfReady()
+                        } else {
+                            outData.append(chunk)
+                        }
+                    }
                 }
-                group.enter()
-                readQueue.async {
-                    errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                    group.leave()
+                errPipe.fileHandleForReading.readabilityHandler = { handle in
+                    let chunk = handle.availableData
+                    stateQueue.async {
+                        if chunk.isEmpty {
+                            errDone = true
+                            handle.readabilityHandler = nil
+                            finishIfReady()
+                        } else {
+                            errData.append(chunk)
+                        }
+                    }
+                }
+
+                process.terminationHandler = { _ in
+                    stateQueue.async {
+                        exited = true
+                        finishIfReady()
+                    }
                 }
 
                 do {
                     try process.run()
                 } catch {
-                    // Unblock the readers (no process means no EOF otherwise).
-                    try? outPipe.fileHandleForWriting.close()
-                    try? errPipe.fileHandleForWriting.close()
-                    group.wait()
-                    cont.resume(throwing: error)
+                    stateQueue.async {
+                        guard !finished else { return }
+                        finished = true
+                        outPipe.fileHandleForReading.readabilityHandler = nil
+                        errPipe.fileHandleForReading.readabilityHandler = nil
+                        cont.resume(throwing: error)
+                    }
                     return
                 }
 
-                let timedOut: Bool
+                // Safety net: a timeout terminates the process so a stuck git can
+                // never wedge a caller. SIGTERM first, then SIGKILL if it lingers.
                 if let timeout {
-                    timedOut = exitSemaphore.wait(timeout: .now() + timeout) == .timedOut
-                    if timedOut {
+                    stateQueue.asyncAfter(deadline: .now() + timeout) {
+                        guard !finished, !exited else { return }
+                        timedOut = true
                         if process.isRunning { process.terminate() }
-                        if exitSemaphore.wait(timeout: .now() + 2) == .timedOut, process.isRunning {
-                            Darwin.kill(process.processIdentifier, SIGKILL)
-                            _ = exitSemaphore.wait(timeout: .now() + 1)
+                        stateQueue.asyncAfter(deadline: .now() + 2) {
+                            if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
                         }
+                        finishIfReady()
                     }
-                } else {
-                    exitSemaphore.wait()
-                    timedOut = false
-                }
-
-                if timedOut {
-                    try? outPipe.fileHandleForReading.close()
-                    try? errPipe.fileHandleForReading.close()
-                }
-                group.wait()
-
-                let out = String(decoding: outData, as: UTF8.self)
-                let err = String(decoding: errData, as: UTF8.self)
-
-                if timedOut {
-                    cont.resume(throwing: GitTimeoutError(command: command, timeout: timeout ?? 0))
-                } else if process.terminationStatus == 0 || allowNonZero {
-                    cont.resume(returning: out)
-                } else {
-                    let raw = err.isEmpty ? out : err
-                    cont.resume(throwing: GitError(
-                        command: command,
-                        exitCode: process.terminationStatus,
-                        message: raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                    ))
                 }
             }
+        } onCancel: {
+            // The owning Task was cancelled (e.g. a superseded reload): stop the
+            // git child so orphans don't pile up. The handlers above still resume
+            // the continuation when it exits.
+            if process.isRunning { process.terminate() }
         }
     }
 }
