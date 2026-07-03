@@ -10,6 +10,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var sidebarStatuses: [Repository.ID: RepoSidebarStatus] = [:]
     @Published private(set) var isFetchingActive = false
     private var sidebarStatusGenerations: [Repository.ID: Int] = [:]
+    private var lastActiveSidebarStatusRefreshAt: Date?
 
     // Loaded data for the selected repo
     @Published private(set) var nodes: [CommitNode] = []
@@ -52,6 +53,7 @@ final class AppStore: ObservableObject {
     /// Bumped on every (re)load; a load only publishes if it is still the latest,
     /// so a slow repo's results can't clobber a repo the user has since switched to.
     private var loadGeneration = 0
+    private static let activationSidebarRefreshInterval: TimeInterval = 5
 
     /// Watches the selected repo's `.git` so external changes (e.g. a commit made
     /// in a terminal or agent) refresh the UI automatically. Recreated on switch.
@@ -503,6 +505,7 @@ final class AppStore: ObservableObject {
     // MARK: - Sidebar status / batch fetch
 
     func refreshActiveSidebarStatuses() {
+        lastActiveSidebarStatusRefreshAt = Date()
         let activeIDs = Set(activeRepositories.map(\.id))
         sidebarStatuses = sidebarStatuses.filter { activeIDs.contains($0.key) }
         sidebarStatusGenerations = sidebarStatusGenerations.filter { activeIDs.contains($0.key) }
@@ -510,6 +513,18 @@ final class AppStore: ObservableObject {
         for repo in activeRepositories {
             refreshSidebarStatus(for: repo)
         }
+    }
+
+    func refreshActiveSidebarStatusesOnActivation() {
+        guard !isRepositoryOperationInProgress else { return }
+
+        let now = Date()
+        if let lastActiveSidebarStatusRefreshAt,
+           now.timeIntervalSince(lastActiveSidebarStatusRefreshAt) < Self.activationSidebarRefreshInterval {
+            return
+        }
+
+        refreshActiveSidebarStatuses()
     }
 
     func refreshSidebarStatus(for repo: Repository) {

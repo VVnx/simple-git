@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ContentView: View {
@@ -14,6 +15,9 @@ struct ContentView: View {
             // Reload the repo restored from the last session, once.
             if store.selectedRepoID != nil { store.reload() }
             store.refreshActiveSidebarStatuses()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            store.refreshActiveSidebarStatusesOnActivation()
         }
         .alert(
             "出错了",
