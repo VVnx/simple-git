@@ -16,7 +16,12 @@ struct GitService {
     private var runner: GitRunner { GitRunner(workingDirectory: path) }
 
     private static let unit = "\u{1f}"   // field separator inside a line
-    private static let remoteOperationTimeout: TimeInterval = 180
+    private static let remoteTotalTimeout: TimeInterval = 180
+    private static let remoteIdleTimeout: TimeInterval = 35
+    private static let remoteHTTPLowSpeedLimit = 1
+    private static let remoteSSHConnectTimeout = 20
+    private static let remoteSSHServerAliveInterval = 10
+    private static let remoteSSHServerAliveCountMax = 2
 
     // MARK: Validation
 
@@ -164,19 +169,19 @@ struct GitService {
     // MARK: Mutations
 
     func fetch() async throws {
-        try await runner.run(["fetch", "--all", "--prune"], timeout: Self.remoteOperationTimeout)
+        try await runRemote(["fetch", "--all", "--prune", "--progress"])
     }
 
     func pull() async throws {
-        try await runner.run(["pull", "--no-edit"], timeout: Self.remoteOperationTimeout)
+        try await runRemote(["pull", "--progress", "--no-edit"])
     }
 
     func push() async throws {
-        try await runner.run(["push"], timeout: Self.remoteOperationTimeout)
+        try await runRemote(["push", "--progress"])
     }
 
     func push(setUpstreamTo remote: String, branch: String) async throws {
-        try await runner.run(["push", "--set-upstream", remote, branch], timeout: Self.remoteOperationTimeout)
+        try await runRemote(["push", "--progress", "--set-upstream", remote, branch])
     }
 
     func merge(_ branch: String) async throws { try await runner.run(["merge", "--no-edit", branch]) }
@@ -184,6 +189,45 @@ struct GitService {
     func remotes() async throws -> [String] {
         let out = try await runner.run(["remote"])
         return out.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+    }
+
+    private func runRemote(_ args: [String]) async throws {
+        try await runner.run(
+            args,
+            timeout: Self.remoteTotalTimeout,
+            idleTimeout: Self.remoteIdleTimeout,
+            environment: await remoteEnvironment()
+        )
+    }
+
+    private func remoteEnvironment() async -> [String: String] {
+        var env = [
+            "GIT_HTTP_LOW_SPEED_LIMIT": String(Self.remoteHTTPLowSpeedLimit),
+            "GIT_HTTP_LOW_SPEED_TIME": String(Int(Self.remoteIdleTimeout.rounded()))
+        ]
+
+        if await shouldUseDefaultSSHTimeouts() {
+            env["GIT_SSH_COMMAND"] = [
+                "ssh",
+                "-o BatchMode=yes",
+                "-o ConnectTimeout=\(Self.remoteSSHConnectTimeout)",
+                "-o ServerAliveInterval=\(Self.remoteSSHServerAliveInterval)",
+                "-o ServerAliveCountMax=\(Self.remoteSSHServerAliveCountMax)"
+            ].joined(separator: " ")
+            env["GIT_SSH_VARIANT"] = "ssh"
+        }
+
+        return env
+    }
+
+    private func shouldUseDefaultSSHTimeouts() async -> Bool {
+        let processEnv = ProcessInfo.processInfo.environment
+        guard processEnv["GIT_SSH_COMMAND"] == nil, processEnv["GIT_SSH"] == nil else {
+            return false
+        }
+
+        let configured = (try? await runner.run(["config", "--get", "core.sshCommand"], allowNonZero: true)) ?? ""
+        return configured.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Files changed by a commit. For a normal/root commit this is the diff vs its

@@ -679,6 +679,9 @@ final class AppStore: ObservableObject {
     static func friendlyGitMessage(_ error: Error) -> String {
         if let simple = error as? SimpleGitError { return simple.message }
         if let timeout = error as? GitTimeoutError {
+            if timeout.kind == .idle {
+                return "Git 操作超时:\(Int(timeout.timeout.rounded())) 秒内没有网络响应,已停止本次操作。电脑刚唤醒时网络可能还没恢复,请稍后重试。"
+            }
             return "Git 操作超时:\(Int(timeout.timeout.rounded())) 秒内没有完成,已停止本次操作。请检查网络或远程仓库状态后重试。"
         }
         let raw = (error as? GitError)?.message ?? error.localizedDescription

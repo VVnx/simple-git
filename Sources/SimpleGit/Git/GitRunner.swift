@@ -11,11 +11,22 @@ struct GitError: LocalizedError {
 }
 
 struct GitTimeoutError: LocalizedError {
+    enum Kind {
+        case total
+        case idle
+    }
+
     let command: String
     let timeout: TimeInterval
+    let kind: Kind
 
     var errorDescription: String? {
-        "\(command) 超时(\(Int(timeout.rounded())) 秒)"
+        switch kind {
+        case .total:
+            "\(command) 超时(\(Int(timeout.rounded())) 秒)"
+        case .idle:
+            "\(command) 超时(\(Int(timeout.rounded())) 秒内没有响应)"
+        }
     }
 }
 
@@ -24,8 +35,21 @@ struct GitRunner {
     let workingDirectory: String
 
     @discardableResult
-    func run(_ args: [String], allowNonZero: Bool = false, timeout: TimeInterval? = nil) async throws -> String {
-        try await GitRunner.run(args, in: workingDirectory, allowNonZero: allowNonZero, timeout: timeout)
+    func run(
+        _ args: [String],
+        allowNonZero: Bool = false,
+        timeout: TimeInterval? = nil,
+        idleTimeout: TimeInterval? = nil,
+        environment: [String: String] = [:]
+    ) async throws -> String {
+        try await GitRunner.run(
+            args,
+            in: workingDirectory,
+            allowNonZero: allowNonZero,
+            timeout: timeout,
+            idleTimeout: idleTimeout,
+            environment: environment
+        )
     }
 
     /// Runs `git args...`. `directory` is the working directory (nil to inherit;
@@ -40,7 +64,14 @@ struct GitRunner {
     /// that blocks a GCD worker per call would exhaust the global thread pool,
     /// leaving no thread to drain the pipes, so git blocks forever writing to a
     /// full stdout pipe and the whole UI wedges. Holding no threads avoids that.
-    static func run(_ args: [String], in directory: String?, allowNonZero: Bool = false, timeout: TimeInterval? = nil) async throws -> String {
+    static func run(
+        _ args: [String],
+        in directory: String?,
+        allowNonZero: Bool = false,
+        timeout: TimeInterval? = nil,
+        idleTimeout: TimeInterval? = nil,
+        environment: [String: String] = [:]
+    ) async throws -> String {
         let command = "git " + args.joined(separator: " ")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -57,6 +88,9 @@ struct GitRunner {
         env["PATH"] = env["PATH"].map { "\(extraPath):\($0)" } ?? extraPath
         env["GIT_TERMINAL_PROMPT"] = "0"
         env["GIT_OPTIONAL_LOCKS"] = "0"
+        for (key, value) in environment {
+            env[key] = value
+        }
         process.environment = env
 
         let outPipe = Pipe()
@@ -73,6 +107,9 @@ struct GitRunner {
         var errDone = false
         var exited = false
         var timedOut = false
+        var timedOutAfter: TimeInterval = timeout ?? idleTimeout ?? 0
+        var timeoutKind = GitTimeoutError.Kind.total
+        var idleTimerGeneration = 0
         var finished = false
 
         return try await withTaskCancellationHandler {
@@ -89,7 +126,7 @@ struct GitRunner {
                     errPipe.fileHandleForReading.readabilityHandler = nil
 
                     if timedOut {
-                        cont.resume(throwing: GitTimeoutError(command: command, timeout: timeout ?? 0))
+                        cont.resume(throwing: GitTimeoutError(command: command, timeout: timedOutAfter, kind: timeoutKind))
                         return
                     }
                     let out = String(decoding: outData, as: UTF8.self)
@@ -106,6 +143,32 @@ struct GitRunner {
                     }
                 }
 
+                func timeOut(kind: GitTimeoutError.Kind, after duration: TimeInterval) {
+                    guard !finished, !exited else { return }
+                    timedOut = true
+                    timeoutKind = kind
+                    timedOutAfter = duration
+                    if process.isRunning { process.terminate() }
+                    stateQueue.asyncAfter(deadline: .now() + 2) {
+                        if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
+                    }
+                    finishIfReady()
+                }
+
+                func scheduleIdleTimeout(generation: Int) {
+                    guard let idleTimeout else { return }
+                    stateQueue.asyncAfter(deadline: .now() + idleTimeout) {
+                        guard generation == idleTimerGeneration else { return }
+                        timeOut(kind: .idle, after: idleTimeout)
+                    }
+                }
+
+                func markOutputActivity() {
+                    guard idleTimeout != nil else { return }
+                    idleTimerGeneration += 1
+                    scheduleIdleTimeout(generation: idleTimerGeneration)
+                }
+
                 outPipe.fileHandleForReading.readabilityHandler = { handle in
                     let chunk = handle.availableData
                     stateQueue.async {
@@ -115,6 +178,7 @@ struct GitRunner {
                             finishIfReady()
                         } else {
                             outData.append(chunk)
+                            markOutputActivity()
                         }
                     }
                 }
@@ -127,6 +191,7 @@ struct GitRunner {
                             finishIfReady()
                         } else {
                             errData.append(chunk)
+                            markOutputActivity()
                         }
                     }
                 }
@@ -151,17 +216,15 @@ struct GitRunner {
                     return
                 }
 
+                stateQueue.async {
+                    markOutputActivity()
+                }
+
                 // Safety net: a timeout terminates the process so a stuck git can
                 // never wedge a caller. SIGTERM first, then SIGKILL if it lingers.
                 if let timeout {
                     stateQueue.asyncAfter(deadline: .now() + timeout) {
-                        guard !finished, !exited else { return }
-                        timedOut = true
-                        if process.isRunning { process.terminate() }
-                        stateQueue.asyncAfter(deadline: .now() + 2) {
-                            if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
-                        }
-                        finishIfReady()
+                        timeOut(kind: .total, after: timeout)
                     }
                 }
             }
