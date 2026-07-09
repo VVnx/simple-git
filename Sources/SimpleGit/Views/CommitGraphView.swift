@@ -143,6 +143,25 @@ struct CommitRowView: View {
     let onSelect: () -> Void
     let onCopyHash: () -> Void
 
+    private var branchRefs: [Ref] {
+        refs.filter { $0.kind != .tag }
+    }
+
+    private var tagRefs: [Ref] {
+        refs.filter { $0.kind == .tag }
+    }
+
+    private var refHelp: String {
+        let names = refs.map { ref in
+            switch ref.kind {
+            case .tag: return "tag: \(ref.name)"
+            case .remoteBranch: return "remote: \(ref.name)"
+            default: return "branch: \(ref.name)"
+            }
+        }
+        return names.isEmpty ? "" : "\n\(names.joined(separator: " · "))"
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             Canvas { context, size in
@@ -156,12 +175,15 @@ struct CommitRowView: View {
             .frame(width: GraphDraw.width(laneCount), height: GraphDraw.rowHeight)
 
             HStack(spacing: 6) {
-                ForEach(refs) { ref in
+                ForEach(branchRefs) { ref in
                     RefChip(ref: ref, isCurrent: ref.kind == .localBranch && ref.name == currentBranch)
                 }
                 Text(node.commit.subject)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                ForEach(tagRefs) { ref in
+                    RefChip(ref: ref, isCurrent: false)
+                }
 
                 Spacer(minLength: 8)
 
@@ -193,7 +215,7 @@ struct CommitRowView: View {
         .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
         .contentShape(Rectangle())
         .onTapGesture { onSelect() }
-        .help("\(node.commit.shortHash) · \(node.commit.authorName) <\(node.commit.authorEmail)> · \(RelativeDate.absoluteString(from: node.commit.date))\n\(node.commit.subject)")
+        .help("\(node.commit.shortHash) · \(node.commit.authorName) <\(node.commit.authorEmail)> · \(RelativeDate.absoluteString(from: node.commit.date))\(refHelp)\n\(node.commit.subject)")
     }
 }
 
