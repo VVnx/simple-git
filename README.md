@@ -24,7 +24,7 @@ Most Git GUIs (SourceTree, Fork, …) pile on every feature imaginable. If you l
 - **Hand-drawn commit graph** — swim-lane layout with colored chips for local / remote branches and tags, plus author, relative time, and short hash.
 - **Working-tree node** — uncommitted changes show as a node at the tip; click any file to see its diff (new / untracked files included).
 - **Read-only diffs** — view commit and working-tree diffs; non-ASCII (e.g. Chinese) paths render correctly.
-- **Core actions only** — Fetch (`--all --prune`), Pull, Push (auto `-u` on first push), Merge a selected commit, Refresh (`⌘R`).
+- **Core actions only** — Fetch (`--all --prune --tags`), Pull, Push (auto `-u` on first push), Merge a selected commit, Refresh (`⌘R`).
 - **Live auto-refresh** — an FSEvents watcher on `.git` updates the UI the moment you commit / switch branches / fetch from a terminal or AI agent — no manual refresh.
 - **Jump to HEAD** — click the branch in the status bar to scroll to and select the latest commit on your branch.
 - **Friendly feedback** — readable error messages (no raw git `hint:` dumps) and top toasts for in-progress / success.

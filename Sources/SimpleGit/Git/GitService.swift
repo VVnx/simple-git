@@ -169,7 +169,7 @@ struct GitService {
     // MARK: Mutations
 
     func fetch() async throws {
-        try await runRemote(["fetch", "--all", "--prune", "--progress"])
+        try await runRemote(["fetch", "--all", "--prune", "--tags", "--progress"])
     }
 
     func pull() async throws {

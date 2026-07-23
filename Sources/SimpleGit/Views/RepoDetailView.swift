@@ -105,7 +105,7 @@ struct RepoDetailView: View {
             }
             .labelStyle(.titleAndIcon)
             .disabled(store.isRepositoryOperationInProgress)
-            .help("git fetch --all --prune:只下载远程更新,不改动工作区")
+            .help("git fetch --all --prune --tags:下载远程更新和全量 tag,不改动工作区")
 
             Button {
                 store.pull()
