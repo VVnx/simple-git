@@ -23,6 +23,9 @@ final class AppStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var busyMessage: String?
     @Published var errorMessage: String?
+    /// Offered after a non-fast-forward push so the user can update remote refs
+    /// before choosing what to merge into the current branch.
+    @Published var showFetchAfterRejectedPush = false
     /// Transient success banner ("Push 成功" …); auto-clears after a few seconds.
     @Published var successMessage: String?
     private var successClearTask: Task<Void, Never>?
@@ -638,7 +641,7 @@ final class AppStore: ObservableObject {
     func push() {
         // Capture status on the main actor before handing work to the background.
         let current = status
-        perform("正在 Push…", success: "Push 成功") { service in
+        perform("正在 Push…", success: "Push 成功", offerFetchAfterRejectedPush: true) { service in
             if let current, current.upstream == nil, !current.detached {
                 // No upstream yet — set one against the repo's remote so a freshly
                 // created branch pushes without the user typing a command.
@@ -653,13 +656,23 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func fetchAfterRejectedPush() {
+        showFetchAfterRejectedPush = false
+        fetch()
+    }
+
     func mergeCommit(_ commit: Commit) {
         perform("正在 Merge \(commit.shortHash)…", success: "已合并 \(commit.shortHash)") {
             try await $0.merge(commit.hash)
         }
     }
 
-    private func perform(_ message: String, success: String, _ op: @escaping (GitService) async throws -> Void) {
+    private func perform(
+        _ message: String,
+        success: String,
+        offerFetchAfterRejectedPush: Bool = false,
+        _ op: @escaping (GitService) async throws -> Void
+    ) {
         guard !isRepositoryOperationInProgress else { return }
         guard let repo = selectedRepo else { return }
         let service = GitService(path: repo.path)
@@ -667,13 +680,12 @@ final class AppStore: ObservableObject {
         successMessage = nil
         Task {
             var succeeded = false
+            var operationError: Error?
             do {
                 try await op(service)
                 succeeded = true
             } catch {
-                if selectedRepoID == repo.id {
-                    errorMessage = Self.friendlyGitMessage(error)
-                }
+                operationError = error
             }
             // Always refresh afterwards — even on failure — so a half-applied
             // action (e.g. a conflicted merge that left the tree MERGING) shows
@@ -684,8 +696,25 @@ final class AppStore: ObservableObject {
 
             let stillSelected = selectedRepoID == repo.id
             busyMessage = nil
-            if succeeded && stillSelected { flashSuccess(success) }
+            if succeeded && stillSelected {
+                flashSuccess(success)
+            } else if let operationError, stillSelected {
+                if offerFetchAfterRejectedPush,
+                   Self.isPushRejectedBecauseRemoteHasUpdates(operationError) {
+                    showFetchAfterRejectedPush = true
+                } else {
+                    errorMessage = Self.friendlyGitMessage(operationError)
+                }
+            }
         }
+    }
+
+    private static func isPushRejectedBecauseRemoteHasUpdates(_ error: Error) -> Bool {
+        let raw = (error as? GitError)?.message ?? error.localizedDescription
+        let lower = raw.lowercased()
+        return lower.contains("fetch first")
+            || lower.contains("non-fast-forward")
+            || (lower.contains("rejected") && lower.contains("remote contains work"))
     }
 
     /// Maps raw `git` stderr into a short, actionable Chinese message for the
@@ -702,8 +731,7 @@ final class AppStore: ObservableObject {
         let raw = (error as? GitError)?.message ?? error.localizedDescription
         let lower = raw.lowercased()
 
-        if lower.contains("fetch first") || lower.contains("non-fast-forward")
-            || (lower.contains("rejected") && lower.contains("remote contains work")) {
+        if isPushRejectedBecauseRemoteHasUpdates(error) {
             return "推送被拒绝:远端有你本地还没有的提交。请先 Pull 拉取合并,再 Push。"
         }
         if lower.contains("permission denied") || lower.contains("authentication failed")

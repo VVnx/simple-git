@@ -30,5 +30,14 @@ struct ContentView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
+        .alert(
+            "远端有新提交",
+            isPresented: $store.showFetchAfterRejectedPush
+        ) {
+            Button("确认并 Fetch") { store.fetchAfterRejectedPush() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("Push 被拒绝，因为远端有本地尚未获取的提交。确认后会先 Fetch 更新远端分支，之后你可以选择需要的提交进行 Merge。")
+        }
     }
 }
