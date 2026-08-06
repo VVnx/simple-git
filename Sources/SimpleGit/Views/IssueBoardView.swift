@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-private final class IssueBoardModel: ObservableObject {
+final class IssueBoardModel: ObservableObject {
     @Published private(set) var issues: [GitHubIssue] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isCreating = false
@@ -19,6 +19,9 @@ private final class IssueBoardModel: ObservableObject {
 
     func load(repository: Repository) async {
         let path = repository.path
+        if activeRepositoryPath != path {
+            issues = []
+        }
         activeRepositoryPath = path
         isLoading = true
         loadError = nil
@@ -66,9 +69,8 @@ private final class IssueBoardModel: ObservableObject {
 
 struct IssueBoardView: View {
     let repository: Repository
-
-    @StateObject private var model = IssueBoardModel()
-    @State private var showingNewIssue = false
+    @ObservedObject var model: IssueBoardModel
+    @Binding var showingNewIssue: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -143,21 +145,6 @@ struct IssueBoardView: View {
                 ProgressView()
                     .controlSize(.small)
             }
-
-            Button {
-                Task { await model.load(repository: repository) }
-            } label: {
-                Label("刷新", systemImage: "arrow.clockwise")
-            }
-            .disabled(model.isLoading)
-
-            Button {
-                showingNewIssue = true
-            } label: {
-                Label("新建 Issue", systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(model.isCreating)
         }
         .padding(.horizontal, 16)
         .frame(height: 58)
