@@ -230,63 +230,92 @@ private struct IssueBoardColumn: View {
 private struct IssueCard: View {
     let issue: GitHubIssue
     let tint: Color
+    @State private var linkCopied = false
 
     var body: some View {
-        Link(destination: issue.url) {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack {
-                    Text("#\(issue.number)")
-                        .font(.caption.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(tint)
-                    Spacer()
-                    Text(RelativeDate.string(from: issue.updatedAt))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
+        ZStack(alignment: .topTrailing) {
+            Link(destination: issue.url) {
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack {
+                        Text("#\(issue.number)")
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(tint)
+                        Spacer()
+                        Text(RelativeDate.string(from: issue.updatedAt))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .padding(.trailing, 27)
+                    }
 
-                Text(issue.title)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(issue.title)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                if !issue.labels.isEmpty {
-                    HStack(spacing: 5) {
-                        ForEach(Array(issue.labels.prefix(2)), id: \.self) { label in
-                            Text(label.name)
-                                .font(.caption2.weight(.medium))
-                                .lineLimit(1)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(label.tint.opacity(0.16), in: Capsule())
-                                .foregroundStyle(label.tint)
-                        }
-                        if issue.labels.count > 2 {
-                            Text("+\(issue.labels.count - 2)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                    if !issue.labels.isEmpty {
+                        HStack(spacing: 5) {
+                            ForEach(Array(issue.labels.prefix(2)), id: \.self) { label in
+                                Text(label.name)
+                                    .font(.caption2.weight(.medium))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(label.tint.opacity(0.16), in: Capsule())
+                                    .foregroundStyle(label.tint)
+                            }
+                            if issue.labels.count > 2 {
+                                Text("+\(issue.labels.count - 2)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
-                }
 
-                if !issue.assignees.isEmpty {
-                    Label(issue.assignees.joined(separator: ", "), systemImage: "person.crop.circle")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    if !issue.assignees.isEmpty {
+                        Label(issue.assignees.joined(separator: ", "), systemImage: "person.crop.circle")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
+                .padding(11)
+                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
-            .padding(11)
-            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            .buttonStyle(.plain)
+            .help("在 GitHub 打开 Issue #\(issue.number)")
+
+            Button(action: copyLink) {
+                Image(systemName: linkCopied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(linkCopied ? Color.green : Color.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(.regularMaterial, in: Circle())
+                    .contentShape(Circle())
             }
-            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .buttonStyle(.plain)
+            .padding(.top, 7)
+            .padding(.trailing, 7)
+            .help(linkCopied ? "链接已复制" : "复制 Issue 链接")
+            .accessibilityLabel(linkCopied ? "链接已复制" : "复制 Issue 链接")
         }
-        .buttonStyle(.plain)
-        .help("在 GitHub 打开 Issue #\(issue.number)")
+    }
+
+    private func copyLink() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(issue.url.absoluteString, forType: .string)
+        linkCopied = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            linkCopied = false
+        }
     }
 }
 
