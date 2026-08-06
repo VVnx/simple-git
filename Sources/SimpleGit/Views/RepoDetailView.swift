@@ -3,6 +3,7 @@ import SwiftUI
 struct RepoDetailView: View {
     @EnvironmentObject var store: AppStore
     @State private var showMergeConfirm = false
+    @State private var showIssueBoard = false
 
     var body: some View {
         Group {
@@ -12,19 +13,24 @@ struct RepoDetailView: View {
                     systemImage: "tray",
                     message: "从左侧选择,或点「添加仓库」"
                 )
-            } else {
+            } else if let repository = store.selectedRepo {
                 VStack(spacing: 0) {
-                    graph
-                    if store.isUncommittedSelected {
-                        Divider()
-                        WorkingChangesPanel()
-                            .frame(height: 260)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    } else if let commit = store.selectedCommit {
-                        Divider()
-                        CommitDetailPanel(commit: commit)
-                            .frame(height: 260)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    if showIssueBoard {
+                        IssueBoardView(repository: repository)
+                            .transition(.opacity)
+                    } else {
+                        graph
+                        if store.isUncommittedSelected {
+                            Divider()
+                            WorkingChangesPanel()
+                                .frame(height: 260)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        } else if let commit = store.selectedCommit {
+                            Divider()
+                            CommitDetailPanel(commit: commit)
+                                .frame(height: 260)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
                     }
                     Divider()
                     StatusBarView(
@@ -36,6 +42,7 @@ struct RepoDetailView: View {
                     )
                 }
                 .animation(.easeInOut(duration: 0.2), value: store.selection)
+                .animation(.easeInOut(duration: 0.2), value: showIssueBoard)
             }
         }
         .overlay(alignment: .top) {
@@ -135,6 +142,12 @@ struct RepoDetailView: View {
             .help(store.selectedCommit == nil
                   ? "先在下方点选一个提交,再合并到当前分支"
                   : "把所选提交合并到当前分支(会二次确认)")
+
+            Toggle("Issue 看板", isOn: $showIssueBoard)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .fixedSize()
+                .help("在提交图与当前仓库的 GitHub Issue 看板之间切换")
         }
     }
 }
