@@ -31,7 +31,8 @@ struct GitHubIssueService {
         let issues = try await listIssues(state: "open", limit: 1000)
         return GitHubIssueCounts(
             todo: issues.filter { $0.boardStatus == .todo }.count,
-            inProgress: issues.filter { $0.boardStatus == .inProgress }.count
+            inProgress: issues.filter { $0.boardStatus == .inProgress }.count,
+            review: issues.filter { $0.boardStatus == .review }.count
         )
     }
 

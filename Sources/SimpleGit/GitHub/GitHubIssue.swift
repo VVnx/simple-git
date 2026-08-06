@@ -8,6 +8,7 @@ enum GitHubIssueState: String, Hashable {
 enum IssueBoardStatus: String, CaseIterable, Identifiable {
     case todo
     case inProgress
+    case review
     case done
 
     var id: String { rawValue }
@@ -15,7 +16,8 @@ enum IssueBoardStatus: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .todo: return "待处理"
-        case .inProgress: return "进行中"
+        case .inProgress: return "开发中"
+        case .review: return "开发完成待 Review"
         case .done: return "已完成"
         }
     }
@@ -24,6 +26,7 @@ enum IssueBoardStatus: String, CaseIterable, Identifiable {
         switch self {
         case .todo: return "circle"
         case .inProgress: return "circle.lefthalf.filled"
+        case .review: return "eye.circle.fill"
         case .done: return "checkmark.circle.fill"
         }
     }
@@ -37,22 +40,26 @@ struct GitHubIssueLabel: Hashable {
 struct GitHubIssueCounts {
     let todo: Int
     let inProgress: Int
+    let review: Int
 }
 
 struct RepoIssueSidebarStatus {
     var todoCount: Int
     var inProgressCount: Int
+    var reviewCount: Int
     var isLoading: Bool = false
     var errorMessage: String?
 
     init(
         todoCount: Int,
         inProgressCount: Int,
+        reviewCount: Int,
         isLoading: Bool = false,
         errorMessage: String? = nil
     ) {
         self.todoCount = todoCount
         self.inProgressCount = inProgressCount
+        self.reviewCount = reviewCount
         self.isLoading = isLoading
         self.errorMessage = errorMessage
     }
@@ -60,12 +67,14 @@ struct RepoIssueSidebarStatus {
     init(counts: GitHubIssueCounts) {
         todoCount = counts.todo
         inProgressCount = counts.inProgress
+        reviewCount = counts.review
     }
 
     static func loading(from previous: RepoIssueSidebarStatus?) -> RepoIssueSidebarStatus {
         RepoIssueSidebarStatus(
             todoCount: previous?.todoCount ?? 0,
             inProgressCount: previous?.inProgressCount ?? 0,
+            reviewCount: previous?.reviewCount ?? 0,
             isLoading: true
         )
     }
@@ -74,6 +83,7 @@ struct RepoIssueSidebarStatus {
         RepoIssueSidebarStatus(
             todoCount: previous?.todoCount ?? 0,
             inProgressCount: previous?.inProgressCount ?? 0,
+            reviewCount: previous?.reviewCount ?? 0,
             errorMessage: message
         )
     }
@@ -100,6 +110,25 @@ struct GitHubIssue: Identifiable, Hashable {
                 .replacingOccurrences(of: "-", with: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
+
+        let isReadyForReview = progressLabels.contains { label in
+            label == "review"
+                || label == "needs review"
+                || label == "ready for review"
+                || label == "awaiting review"
+                || label == "pending review"
+                || label == "code review"
+                || label == "待 review"
+                || label == "待评审"
+                || label == "待审核"
+                || label == "开发完成"
+                || label.contains("status:review")
+                || label.contains("status: review")
+                || label.contains("status:ready for review")
+                || label.contains("status: ready for review")
+        }
+        if isReadyForReview { return .review }
+
         let isInProgress = progressLabels.contains { label in
             label == "doing"
                 || label == "wip"

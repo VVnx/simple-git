@@ -156,7 +156,9 @@ struct IssueBoardView: View {
         } else {
             GeometryReader { geometry in
                 let spacing: CGFloat = 12
-                let columnWidth = max(230, (geometry.size.width - spacing * 2 - 32) / 3)
+                let columnCount = CGFloat(IssueBoardStatus.allCases.count)
+                let totalSpacing = spacing * (columnCount - 1)
+                let columnWidth = max(230, (geometry.size.width - totalSpacing - 32) / columnCount)
 
                 ScrollView(.horizontal) {
                     HStack(alignment: .top, spacing: spacing) {
@@ -412,6 +414,7 @@ private extension IssueBoardStatus {
         switch self {
         case .todo: return .orange
         case .inProgress: return .blue
+        case .review: return .teal
         case .done: return .green
         }
     }
@@ -420,6 +423,7 @@ private extension IssueBoardStatus {
         switch self {
         case .todo: return "tray"
         case .inProgress: return "hammer"
+        case .review: return "eye"
         case .done: return "checkmark"
         }
     }
@@ -428,6 +432,7 @@ private extension IssueBoardStatus {
         switch self {
         case .todo: return "没有待处理 Issue"
         case .inProgress: return "添加 in-progress 标签后显示在这里"
+        case .review: return "添加 ready-for-review 标签后显示在这里"
         case .done: return "关闭的 Issue 会显示在这里"
         }
     }

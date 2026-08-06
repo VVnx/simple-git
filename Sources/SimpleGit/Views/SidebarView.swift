@@ -109,7 +109,7 @@ struct SidebarView: View {
                     .buttonStyle(SidebarFooterButtonStyle())
                     .disabled(activeRefreshInProgress)
                     .help(store.isIssueBoardMode
-                          ? "刷新 Active 仓库的待处理与进行中 Issue 数量"
+                          ? "刷新 Active 仓库的待处理、开发中与待 Review Issue 数量"
                           : "刷新 Active 仓库:fetch 并读取最新状态")
                 }
             }
@@ -415,7 +415,14 @@ private struct RepoIssueStatusBadges: View {
                         value: status.inProgressCount,
                         color: status.inProgressCount > 0 ? .blue : Color.secondary.opacity(0.45)
                     )
-                    .help("进行中: \(status.inProgressCount)")
+                    .help("开发中: \(status.inProgressCount)")
+
+                    RepoMetric(
+                        systemName: "eye",
+                        value: status.reviewCount,
+                        color: status.reviewCount > 0 ? .teal : Color.secondary.opacity(0.45)
+                    )
+                    .help("开发完成待 Review: \(status.reviewCount)")
                 }
             } else {
                 ProgressView()

@@ -749,7 +749,8 @@ final class AppStore: ObservableObject {
         _ = bumpIssueSidebarStatusGeneration(for: repo.id)
         let counts = GitHubIssueCounts(
             todo: issues.filter { $0.boardStatus == .todo }.count,
-            inProgress: issues.filter { $0.boardStatus == .inProgress }.count
+            inProgress: issues.filter { $0.boardStatus == .inProgress }.count,
+            review: issues.filter { $0.boardStatus == .review }.count
         )
         issueSidebarStatuses[repo.id] = RepoIssueSidebarStatus(counts: counts)
     }
