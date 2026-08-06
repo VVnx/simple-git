@@ -727,6 +727,33 @@ final class AppStore: ObservableObject {
         issueSidebarStatusGenerations[id] == generation
     }
 
+    func beginCurrentIssueRefresh() -> Bool {
+        guard !isRepositoryOperationInProgress else { return false }
+        successClearTask?.cancel()
+        successMessage = nil
+        busyMessage = "正在刷新 Issues…"
+        return true
+    }
+
+    func finishCurrentIssueRefresh(succeeded: Bool, error: String?) {
+        busyMessage = nil
+        if succeeded {
+            flashSuccess("Issues 刷新完成")
+        } else {
+            errorMessage = error ?? "Issue 刷新失败。"
+        }
+    }
+
+    func publishIssueSidebarStatus(for repo: Repository, issues: [GitHubIssue]) {
+        guard repositoryIsActive(repo.id) else { return }
+        _ = bumpIssueSidebarStatusGeneration(for: repo.id)
+        let counts = GitHubIssueCounts(
+            todo: issues.filter { $0.boardStatus == .todo }.count,
+            inProgress: issues.filter { $0.boardStatus == .inProgress }.count
+        )
+        issueSidebarStatuses[repo.id] = RepoIssueSidebarStatus(counts: counts)
+    }
+
     // MARK: - Actions
 
     func fetch() { perform("正在 Fetch…", success: "Fetch 完成") { try await $0.fetch() } }

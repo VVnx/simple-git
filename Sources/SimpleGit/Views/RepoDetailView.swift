@@ -113,13 +113,29 @@ struct RepoDetailView: View {
             if store.isIssueBoardMode {
                 Button {
                     guard let repository = store.selectedRepo else { return }
-                    store.refreshIssueSidebarStatus(for: repository)
-                    Task { await issueBoardModel.load(repository: repository) }
+                    guard store.beginCurrentIssueRefresh() else { return }
+                    Task {
+                        let succeeded = await issueBoardModel.load(repository: repository)
+                        if succeeded {
+                            store.publishIssueSidebarStatus(
+                                for: repository,
+                                issues: issueBoardModel.issues
+                            )
+                        }
+                        store.finishCurrentIssueRefresh(
+                            succeeded: succeeded,
+                            error: issueBoardModel.loadError
+                        )
+                    }
                 } label: {
                     Label("刷新 Issues", systemImage: "arrow.clockwise")
                 }
                 .labelStyle(.iconOnly)
-                .disabled(issueBoardModel.isLoading || store.selectedRepo == nil)
+                .disabled(
+                    issueBoardModel.isLoading
+                        || store.isRepositoryOperationInProgress
+                        || store.selectedRepo == nil
+                )
                 .help("重新读取当前仓库的 GitHub Issue 列表")
 
                 Button {
@@ -128,7 +144,11 @@ struct RepoDetailView: View {
                     Label("新建 Issue", systemImage: "plus.circle")
                 }
                 .labelStyle(.iconOnly)
-                .disabled(issueBoardModel.isCreating || store.selectedRepo == nil)
+                .disabled(
+                    issueBoardModel.isCreating
+                        || store.isRepositoryOperationInProgress
+                        || store.selectedRepo == nil
+                )
                 .help("在当前 GitHub 仓库创建一个新 Issue")
             } else {
                 Button {

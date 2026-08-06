@@ -23,7 +23,8 @@ final class IssueBoardModel: ObservableObject {
         await load(repository: repository)
     }
 
-    func load(repository: Repository) async {
+    @discardableResult
+    func load(repository: Repository) async -> Bool {
         let path = repository.path
         if activeRepositoryPath != path {
             issues = []
@@ -35,14 +36,16 @@ final class IssueBoardModel: ObservableObject {
 
         do {
             let loaded = try await GitHubIssueService(repositoryPath: path).listIssues()
-            guard !Task.isCancelled, activeRepositoryPath == path else { return }
+            guard !Task.isCancelled, activeRepositoryPath == path else { return false }
             issues = loaded
             loadedRepositoryPath = path
             isLoading = false
+            return true
         } catch {
-            guard !Task.isCancelled, activeRepositoryPath == path else { return }
+            guard !Task.isCancelled, activeRepositoryPath == path else { return false }
             loadError = GitHubIssueService.friendlyMessage(error)
             isLoading = false
+            return false
         }
     }
 
