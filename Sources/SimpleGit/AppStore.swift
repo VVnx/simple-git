@@ -85,9 +85,7 @@ final class AppStore: ObservableObject {
         guard isIssueBoardMode != enabled else { return }
         isIssueBoardMode = enabled
         if enabled {
-            refreshActiveIssueStatuses()
-        } else {
-            refreshActiveSidebarStatuses()
+            loadMissingActiveIssueStatuses()
         }
     }
 
@@ -656,9 +654,17 @@ final class AppStore: ObservableObject {
     // MARK: - Sidebar Issue status
 
     func refreshActiveIssueStatuses() {
+        refreshIssueSidebarStatuses(for: activeRepositories)
+    }
+
+    private func loadMissingActiveIssueStatuses() {
+        let missing = activeRepositories.filter { issueSidebarStatuses[$0.id] == nil }
+        refreshIssueSidebarStatuses(for: missing)
+    }
+
+    private func refreshIssueSidebarStatuses(for repos: [Repository]) {
         guard !isFetchingActiveIssues else { return }
-        let repos = activeRepositories
-        let activeIDs = Set(repos.map(\.id))
+        let activeIDs = Set(activeRepositories.map(\.id))
         issueSidebarStatuses = issueSidebarStatuses.filter { activeIDs.contains($0.key) }
         issueSidebarStatusGenerations = issueSidebarStatusGenerations.filter { activeIDs.contains($0.key) }
         guard !repos.isEmpty else { return }

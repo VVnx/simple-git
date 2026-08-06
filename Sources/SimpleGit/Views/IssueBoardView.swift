@@ -11,16 +11,23 @@ final class IssueBoardModel: ObservableObject {
     @Published var successMessage: String?
 
     private var activeRepositoryPath: String?
+    private var loadedRepositoryPath: String?
     private var successClearTask: Task<Void, Never>?
 
     func issues(for status: IssueBoardStatus) -> [GitHubIssue] {
         issues.filter { $0.boardStatus == status }
     }
 
+    func loadIfNeeded(repository: Repository) async {
+        guard loadedRepositoryPath != repository.path else { return }
+        await load(repository: repository)
+    }
+
     func load(repository: Repository) async {
         let path = repository.path
         if activeRepositoryPath != path {
             issues = []
+            loadedRepositoryPath = nil
         }
         activeRepositoryPath = path
         isLoading = true
@@ -30,6 +37,7 @@ final class IssueBoardModel: ObservableObject {
             let loaded = try await GitHubIssueService(repositoryPath: path).listIssues()
             guard !Task.isCancelled, activeRepositoryPath == path else { return }
             issues = loaded
+            loadedRepositoryPath = path
             isLoading = false
         } catch {
             guard !Task.isCancelled, activeRepositoryPath == path else { return }
@@ -85,7 +93,7 @@ struct IssueBoardView: View {
             )
         )
         .task(id: repository.id) {
-            await model.load(repository: repository)
+            await model.loadIfNeeded(repository: repository)
         }
         .sheet(isPresented: $showingNewIssue) {
             NewIssueSheet(
