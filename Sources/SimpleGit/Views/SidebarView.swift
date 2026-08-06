@@ -38,22 +38,22 @@ struct SidebarView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 7) {
                 HStack(spacing: 8) {
-                    Label(
-                        store.isIssueBoardMode ? "Issue 看板模式" : "切换到 Issue 看板",
-                        systemImage: store.isIssueBoardMode ? "rectangle.3.group.fill" : "rectangle.3.group"
-                    )
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(store.isIssueBoardMode ? Color.accentColor : Color.primary)
-
-                    Spacer(minLength: 4)
+                    Label("Git 模式", systemImage: "point.3.connected.trianglepath.dotted")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(store.isIssueBoardMode ? Color.secondary : Color.accentColor)
 
                     Toggle("", isOn: issueBoardModeBinding)
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
+
+                    Label("看板模式", systemImage: "rectangle.3.group")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(store.isIssueBoardMode ? Color.accentColor : Color.secondary)
                 }
                 .padding(.horizontal, 9)
                 .frame(height: 34)
+                .frame(maxWidth: .infinity)
                 .background(
                     store.isIssueBoardMode ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.05),
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -65,7 +65,7 @@ struct SidebarView: View {
                             lineWidth: 1
                         )
                 }
-                .help(store.isIssueBoardMode ? "关闭看板并返回提交图" : "打开 GitHub Issue 看板")
+                .help(store.isIssueBoardMode ? "当前为看板模式,关闭后切换到 Git 模式" : "当前为 Git 模式,开启后切换到看板模式")
 
                 HStack {
                     Button {

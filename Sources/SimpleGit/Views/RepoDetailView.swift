@@ -118,7 +118,7 @@ struct RepoDetailView: View {
                 } label: {
                     Label("刷新 Issues", systemImage: "arrow.clockwise")
                 }
-                .labelStyle(.titleAndIcon)
+                .labelStyle(.iconOnly)
                 .disabled(issueBoardModel.isLoading || store.selectedRepo == nil)
                 .help("重新读取当前仓库的 GitHub Issue 列表")
 
@@ -127,7 +127,7 @@ struct RepoDetailView: View {
                 } label: {
                     Label("新建 Issue", systemImage: "plus.circle")
                 }
-                .labelStyle(.titleAndIcon)
+                .labelStyle(.iconOnly)
                 .disabled(issueBoardModel.isCreating || store.selectedRepo == nil)
                 .help("在当前 GitHub 仓库创建一个新 Issue")
             } else {
