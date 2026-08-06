@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class IssueBoardModel: ObservableObject {
@@ -9,6 +10,8 @@ final class IssueBoardModel: ObservableObject {
     @Published var loadError: String?
     @Published var actionError: String?
     @Published var successMessage: String?
+    @Published private(set) var updatingIssueNumber: Int?
+    @Published private(set) var statusUpdateError: String?
 
     private var activeRepositoryPath: String?
     private var loadedRepositoryPath: String?
@@ -16,6 +19,35 @@ final class IssueBoardModel: ObservableObject {
 
     func issues(for status: IssueBoardStatus) -> [GitHubIssue] {
         issues.filter { $0.boardStatus == status }
+    }
+
+    func issue(number: Int) -> GitHubIssue? {
+        issues.first { $0.number == number }
+    }
+
+    func updateStatus(
+        of issue: GitHubIssue,
+        to target: IssueBoardStatus,
+        repository: Repository
+    ) async -> Bool {
+        guard updatingIssueNumber == nil else { return false }
+        updatingIssueNumber = issue.number
+        statusUpdateError = nil
+        defer { updatingIssueNumber = nil }
+
+        do {
+            let updated = try await GitHubIssueService(repositoryPath: repository.path)
+                .updateIssueStatus(issue, to: target)
+            guard activeRepositoryPath == repository.path,
+                  let index = issues.firstIndex(where: { $0.number == issue.number }) else {
+                return false
+            }
+            issues[index] = updated
+            return true
+        } catch {
+            statusUpdateError = GitHubIssueService.friendlyMessage(error)
+            return false
+        }
     }
 
     func loadIfNeeded(repository: Repository) async {
@@ -80,6 +112,7 @@ final class IssueBoardModel: ObservableObject {
 
 struct IssueBoardView: View {
     let repository: Repository
+    @EnvironmentObject private var store: AppStore
     @ObservedObject var model: IssueBoardModel
     @Binding var showingNewIssue: Bool
 
@@ -106,7 +139,9 @@ struct IssueBoardView: View {
                     Task {
                         if await model.createIssue(repository: repository, title: title, body: body) {
                             showingNewIssue = false
-                            await model.load(repository: repository)
+                            if await model.load(repository: repository) {
+                                store.publishIssueSidebarStatus(for: repository, issues: model.issues)
+                            }
                         }
                     }
                 }
@@ -165,7 +200,9 @@ struct IssueBoardView: View {
                         ForEach(IssueBoardStatus.allCases) { status in
                             IssueBoardColumn(
                                 status: status,
-                                issues: model.issues(for: status)
+                                issues: model.issues(for: status),
+                                isInteractionDisabled: model.updatingIssueNumber != nil,
+                                onDropIssue: { moveIssue(number: $0, to: status) }
                             )
                             .frame(width: columnWidth)
                         }
@@ -176,11 +213,34 @@ struct IssueBoardView: View {
             }
         }
     }
+
+    private func moveIssue(number: Int, to target: IssueBoardStatus) {
+        guard let issue = model.issue(number: number), issue.boardStatus != target else { return }
+        guard store.beginIssueStatusUpdate(issueNumber: number, target: target) else { return }
+
+        Task {
+            let succeeded = await model.updateStatus(of: issue, to: target, repository: repository)
+            if succeeded {
+                store.publishIssueSidebarStatus(for: repository, issues: model.issues)
+            } else if await model.load(repository: repository) {
+                store.publishIssueSidebarStatus(for: repository, issues: model.issues)
+            }
+            store.finishIssueStatusUpdate(
+                issueNumber: number,
+                target: target,
+                succeeded: succeeded,
+                error: model.statusUpdateError
+            )
+        }
+    }
 }
 
 private struct IssueBoardColumn: View {
     let status: IssueBoardStatus
     let issues: [GitHubIssue]
+    let isInteractionDisabled: Bool
+    let onDropIssue: (Int) -> Void
+    @State private var isDropTargeted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -223,12 +283,38 @@ private struct IssueBoardColumn: View {
                 }
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.78))
+        .background(
+            isDropTargeted
+                ? status.tint.opacity(0.13)
+                : Color(nsColor: .controlBackgroundColor).opacity(0.78)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(status.tint.opacity(0.2), lineWidth: 1)
+                .strokeBorder(
+                    status.tint.opacity(isDropTargeted ? 0.8 : 0.2),
+                    lineWidth: isDropTargeted ? 2 : 1
+                )
         }
+        .allowsHitTesting(!isInteractionDisabled)
+        .onDrop(of: [.plainText], isTargeted: $isDropTargeted) { providers in
+            acceptDrop(providers)
+        }
+        .animation(.easeInOut(duration: 0.15), value: isDropTargeted)
+    }
+
+    private func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard !isInteractionDisabled,
+              let provider = providers.first(where: { $0.canLoadObject(ofClass: NSString.self) }) else {
+            return false
+        }
+        provider.loadObject(ofClass: NSString.self) { value, _ in
+            guard let text = value as? String, let number = Int(text) else { return }
+            DispatchQueue.main.async {
+                onDropIssue(number)
+            }
+        }
+        return true
     }
 }
 
@@ -309,6 +395,9 @@ private struct IssueCard: View {
             .padding(.trailing, 7)
             .help(linkCopied ? "链接已复制" : "复制 Issue 链接")
             .accessibilityLabel(linkCopied ? "链接已复制" : "复制 Issue 链接")
+        }
+        .onDrag {
+            NSItemProvider(object: String(issue.number) as NSString)
         }
     }
 

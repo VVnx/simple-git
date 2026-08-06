@@ -83,6 +83,69 @@ struct GitHubIssueService {
         return url
     }
 
+    func updateIssueStatus(_ issue: GitHubIssue, to target: IssueBoardStatus) async throws -> GitHubIssue {
+        guard issue.boardStatus != target else { return issue }
+
+        let runner = GitHubCommandRunner(workingDirectory: repositoryPath)
+        let workflowLabels = issue.workflowLabelNames
+
+        if target == .done {
+            if issue.state != .closed {
+                _ = try await runner.run(
+                    ["issue", "close", String(issue.number), "--reason", "completed"],
+                    timeout: Self.requestTimeout
+                )
+            }
+            if !workflowLabels.isEmpty {
+                var cleanupArgs = ["issue", "edit", String(issue.number)]
+                for label in workflowLabels {
+                    cleanupArgs += ["--remove-label", label]
+                }
+                _ = try? await runner.run(cleanupArgs, timeout: Self.requestTimeout)
+            }
+            return updatedIssue(issue, state: .closed, target: .done)
+        }
+
+        if issue.state == .closed {
+            _ = try await runner.run(
+                ["issue", "reopen", String(issue.number)],
+                timeout: Self.requestTimeout
+            )
+        }
+
+        let targetLabel: GitHubIssueLabel?
+        switch target {
+        case .todo:
+            targetLabel = nil
+        case .inProgress:
+            targetLabel = GitHubIssueLabel(name: "status:in-progress", color: "1D76DB")
+        case .review:
+            targetLabel = GitHubIssueLabel(name: "status:review", color: "0E8A8A")
+        case .done:
+            targetLabel = nil
+        }
+
+        let alreadyHasTarget = targetLabel.map { target in
+            issue.labels.contains { $0.name.caseInsensitiveCompare(target.name) == .orderedSame }
+        } ?? false
+        if let targetLabel, !alreadyHasTarget {
+            try await ensureWorkflowLabel(targetLabel, runner: runner)
+        }
+
+        var editArgs = ["issue", "edit", String(issue.number)]
+        for label in workflowLabels where label.caseInsensitiveCompare(targetLabel?.name ?? "") != .orderedSame {
+            editArgs += ["--remove-label", label]
+        }
+        if let targetLabel, !alreadyHasTarget {
+            editArgs += ["--add-label", targetLabel.name]
+        }
+        if editArgs.count > 3 {
+            _ = try await runner.run(editArgs, timeout: Self.requestTimeout)
+        }
+
+        return updatedIssue(issue, state: .open, target: target)
+    }
+
     static func friendlyMessage(_ error: Error) -> String {
         if let simple = error as? SimpleGitError { return simple.message }
         if let timeout = error as? GitHubCommandTimeoutError { return timeout.localizedDescription }
@@ -122,6 +185,51 @@ struct GitHubIssueService {
     private static func parseDate(_ value: String) -> Date? {
         if let date = fractionalDateFormatter.date(from: value) { return date }
         return standardDateFormatter.date(from: value)
+    }
+
+    private func ensureWorkflowLabel(
+        _ label: GitHubIssueLabel,
+        runner: GitHubCommandRunner
+    ) async throws {
+        do {
+            _ = try await runner.run(
+                [
+                    "label", "create", label.name,
+                    "--color", label.color,
+                    "--description", label.name == "status:review"
+                        ? "Development complete and ready for review"
+                        : "Development in progress"
+                ],
+                timeout: Self.requestTimeout
+            )
+        } catch let error as GitHubCommandError {
+            guard error.message.lowercased().contains("already exists") else { throw error }
+        }
+    }
+
+    private func updatedIssue(
+        _ issue: GitHubIssue,
+        state: GitHubIssueState,
+        target: IssueBoardStatus
+    ) -> GitHubIssue {
+        var labels = issue.labels.filter { GitHubIssue.workflowStatus(forLabel: $0.name) == nil }
+        switch target {
+        case .inProgress:
+            labels.append(GitHubIssueLabel(name: "status:in-progress", color: "1D76DB"))
+        case .review:
+            labels.append(GitHubIssueLabel(name: "status:review", color: "0E8A8A"))
+        case .todo, .done:
+            break
+        }
+        return GitHubIssue(
+            number: issue.number,
+            title: issue.title,
+            state: state,
+            labels: labels,
+            assignees: issue.assignees,
+            updatedAt: Date(),
+            url: issue.url
+        )
     }
 
     private static let fractionalDateFormatter: ISO8601DateFormatter = {

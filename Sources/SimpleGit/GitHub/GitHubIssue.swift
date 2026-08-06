@@ -103,41 +103,50 @@ struct GitHubIssue: Identifiable, Hashable {
     var boardStatus: IssueBoardStatus {
         guard state == .open else { return .done }
 
-        let progressLabels = labels.map { label in
-            label.name
-                .lowercased()
-                .replacingOccurrences(of: "_", with: " ")
-                .replacingOccurrences(of: "-", with: " ")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
+        let statuses = labels.compactMap { Self.workflowStatus(forLabel: $0.name) }
+        if statuses.contains(.review) { return .review }
+        if statuses.contains(.inProgress) { return .inProgress }
+        return .todo
+    }
 
-        let isReadyForReview = progressLabels.contains { label in
-            label == "review"
-                || label == "needs review"
-                || label == "ready for review"
-                || label == "awaiting review"
-                || label == "pending review"
-                || label == "code review"
-                || label == "待 review"
-                || label == "待评审"
-                || label == "待审核"
-                || label == "开发完成"
-                || label.contains("status:review")
-                || label.contains("status: review")
-                || label.contains("status:ready for review")
-                || label.contains("status: ready for review")
+    var workflowLabelNames: [String] {
+        labels.compactMap { label in
+            Self.workflowStatus(forLabel: label.name) == nil ? nil : label.name
         }
+    }
+
+    static func workflowStatus(forLabel name: String) -> IssueBoardStatus? {
+        let label = name
+            .lowercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let isReadyForReview = label == "review"
+            || label == "needs review"
+            || label == "ready for review"
+            || label == "awaiting review"
+            || label == "pending review"
+            || label == "code review"
+            || label == "待 review"
+            || label == "待评审"
+            || label == "待审核"
+            || label == "开发完成"
+            || label.contains("status:review")
+            || label.contains("status: review")
+            || label.contains("status:ready for review")
+            || label.contains("status: ready for review")
         if isReadyForReview { return .review }
 
-        let isInProgress = progressLabels.contains { label in
-            label == "doing"
-                || label == "wip"
-                || label == "in progress"
-                || label == "进行中"
-                || label == "处理中"
-                || label.contains("status:in progress")
-                || label.contains("status: in progress")
-        }
-        return isInProgress ? .inProgress : .todo
+        let isInProgress = label == "doing"
+            || label == "wip"
+            || label == "in progress"
+            || label == "进行中"
+            || label == "处理中"
+            || label.contains("status:in progress")
+            || label.contains("status: in progress")
+        if isInProgress { return .inProgress }
+
+        return nil
     }
 }

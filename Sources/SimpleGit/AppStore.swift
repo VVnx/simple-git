@@ -744,6 +744,28 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func beginIssueStatusUpdate(issueNumber: Int, target: IssueBoardStatus) -> Bool {
+        guard !isRepositoryOperationInProgress else { return false }
+        successClearTask?.cancel()
+        successMessage = nil
+        busyMessage = "正在把 Issue #\(issueNumber) 移到「\(target.title)」…"
+        return true
+    }
+
+    func finishIssueStatusUpdate(
+        issueNumber: Int,
+        target: IssueBoardStatus,
+        succeeded: Bool,
+        error: String?
+    ) {
+        busyMessage = nil
+        if succeeded {
+            flashSuccess("Issue #\(issueNumber) 已移至「\(target.title)」")
+        } else {
+            errorMessage = error ?? "Issue 状态更新失败。"
+        }
+    }
+
     func publishIssueSidebarStatus(for repo: Repository, issues: [GitHubIssue]) {
         guard repositoryIsActive(repo.id) else { return }
         _ = bumpIssueSidebarStatusGeneration(for: repo.id)
