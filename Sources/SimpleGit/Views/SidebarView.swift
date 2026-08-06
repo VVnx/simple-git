@@ -36,37 +36,82 @@ struct SidebarView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            HStack {
-                Button {
-                    showAddMenu.toggle()
-                } label: {
-                    SidebarFooterIcon(systemName: "plus")
-                }
-                .buttonStyle(SidebarFooterButtonStyle())
-                .disabled(store.isRepositoryOperationInProgress)
-                .help("添加仓库:打开本地或克隆 URL")
-                .popover(isPresented: $showAddMenu, arrowEdge: .bottom) {
-                    AddRepositoryPopover(
-                        onOpenLocal: {
-                            showAddMenu = false
-                            addLocalRepo()
-                        },
-                        onClone: {
-                            showAddMenu = false
-                            showCloneSheet = true
-                        }
+            VStack(spacing: 7) {
+                HStack(spacing: 8) {
+                    Label(
+                        store.isIssueBoardMode ? "Issue 看板模式" : "切换到 Issue 看板",
+                        systemImage: store.isIssueBoardMode ? "rectangle.3.group.fill" : "rectangle.3.group"
                     )
-                }
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(store.isIssueBoardMode ? Color.accentColor : Color.primary)
 
-                Spacer()
+                    Spacer(minLength: 4)
 
-                Button {
-                    store.fetchActiveRepositories()
-                } label: {
-                    SidebarFooterIcon(systemName: "arrow.clockwise")
+                    Toggle("", isOn: issueBoardModeBinding)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
                 }
-                .buttonStyle(SidebarFooterButtonStyle())
-                .help("刷新 Active 仓库:fetch 并读取最新状态")
+                .padding(.horizontal, 9)
+                .frame(height: 34)
+                .background(
+                    store.isIssueBoardMode ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.05),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(
+                            store.isIssueBoardMode ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.1),
+                            lineWidth: 1
+                        )
+                }
+                .help(store.isIssueBoardMode ? "关闭看板并返回提交图" : "打开 GitHub Issue 看板")
+
+                HStack {
+                    Button {
+                        showAddMenu.toggle()
+                    } label: {
+                        SidebarFooterIcon(systemName: "plus")
+                    }
+                    .buttonStyle(SidebarFooterButtonStyle())
+                    .disabled(store.isRepositoryOperationInProgress)
+                    .help("添加仓库:打开本地或克隆 URL")
+                    .popover(isPresented: $showAddMenu, arrowEdge: .bottom) {
+                        AddRepositoryPopover(
+                            onOpenLocal: {
+                                showAddMenu = false
+                                addLocalRepo()
+                            },
+                            onClone: {
+                                showAddMenu = false
+                                showCloneSheet = true
+                            }
+                        )
+                    }
+
+                    Spacer()
+
+                    Button {
+                        if store.isIssueBoardMode {
+                            store.refreshActiveIssueStatuses()
+                        } else {
+                            store.fetchActiveRepositories()
+                        }
+                    } label: {
+                        if activeRefreshInProgress {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: SidebarFooterIcon.size, height: SidebarFooterIcon.size)
+                        } else {
+                            SidebarFooterIcon(systemName: "arrow.clockwise")
+                        }
+                    }
+                    .buttonStyle(SidebarFooterButtonStyle())
+                    .disabled(activeRefreshInProgress)
+                    .help(store.isIssueBoardMode
+                          ? "刷新 Active 仓库的待处理与进行中 Issue 数量"
+                          : "刷新 Active 仓库:fetch 并读取最新状态")
+                }
             }
             .padding(10)
         }
@@ -109,9 +154,17 @@ struct SidebarView: View {
                 RepoRow(
                     repo: repo,
                     status: group == .active ? store.sidebarStatuses[repo.id] : nil,
+                    issueStatus: group == .active ? store.issueSidebarStatuses[repo.id] : nil,
                     showsStatus: group == .active,
+                    isIssueBoardMode: store.isIssueBoardMode,
                     onSelect: { store.select(repo.id) },
-                    onRefresh: { store.refreshRepository(repo) },
+                    onRefresh: {
+                        if store.isIssueBoardMode {
+                            store.refreshIssueSidebarStatus(for: repo)
+                        } else {
+                            store.refreshRepository(repo)
+                        }
+                    },
                     onOpen: { revealInFinder(repo) },
                     onToggleMask: { store.toggleMask(repo) },
                     onMoveToGroup: { store.moveRepository(repo, to: group == .active ? .inactive : .active) },
@@ -149,6 +202,17 @@ struct SidebarView: View {
                 store.select($0)
             }
         )
+    }
+
+    private var issueBoardModeBinding: Binding<Bool> {
+        Binding(
+            get: { store.isIssueBoardMode },
+            set: { store.setIssueBoardMode($0) }
+        )
+    }
+
+    private var activeRefreshInProgress: Bool {
+        store.isIssueBoardMode ? store.isFetchingActiveIssues : store.isFetchingActive
     }
 
     private func addLocalRepo() {
@@ -227,7 +291,9 @@ private struct AddRepositoryAction: View {
 private struct RepoRow: View {
     let repo: Repository
     let status: RepoSidebarStatus?
+    let issueStatus: RepoIssueSidebarStatus?
     let showsStatus: Bool
+    let isIssueBoardMode: Bool
     let onSelect: () -> Void
     let onRefresh: () -> Void
     let onOpen: () -> Void
@@ -252,7 +318,11 @@ private struct RepoRow: View {
                 }
                 .foregroundStyle(.secondary)
             } else if showsStatus {
-                RepoStatusBadges(status: status)
+                if isIssueBoardMode {
+                    RepoIssueStatusBadges(status: issueStatus)
+                } else {
+                    RepoStatusBadges(status: status)
+                }
             }
         }
         .contentShape(Rectangle())
@@ -260,7 +330,7 @@ private struct RepoRow: View {
         .onHover { hovering = $0 }
         .help(repo.masked ? "已隐藏名称" : repo.path)
         .contextMenu {
-            Button("刷新") { onRefresh() }
+            Button(isIssueBoardMode ? "刷新 Issue 数量" : "刷新") { onRefresh() }
             Divider()
             Button("在 Finder 中显示") { onOpen() }
             Button(repo.masked ? "显示名称" : "隐藏名称") { onToggleMask() }
@@ -314,6 +384,47 @@ private struct GroupDropTarget: View {
                 .contentShape(Rectangle())
                 .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
+    }
+}
+
+private struct RepoIssueStatusBadges: View {
+    let status: RepoIssueSidebarStatus?
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let status {
+                if status.isLoading {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .frame(width: 38, alignment: .trailing)
+                } else if let error = status.errorMessage {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .help(error)
+                } else {
+                    RepoMetric(
+                        systemName: "circle",
+                        value: status.todoCount,
+                        color: status.todoCount > 0 ? .orange : Color.secondary.opacity(0.45)
+                    )
+                    .help("待处理: \(status.todoCount)")
+
+                    RepoMetric(
+                        systemName: "circle.lefthalf.filled",
+                        value: status.inProgressCount,
+                        color: status.inProgressCount > 0 ? .blue : Color.secondary.opacity(0.45)
+                    )
+                    .help("进行中: \(status.inProgressCount)")
+                }
+            } else {
+                ProgressView()
+                    .controlSize(.mini)
+                    .frame(width: 38, alignment: .trailing)
+            }
+        }
+        .font(.caption)
+        .monospacedDigit()
     }
 }
 

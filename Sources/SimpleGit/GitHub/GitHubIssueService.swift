@@ -24,11 +24,23 @@ struct GitHubIssueService {
     private static let requestTimeout: TimeInterval = 45
 
     func listIssues() async throws -> [GitHubIssue] {
+        try await listIssues(state: "all", limit: 200)
+    }
+
+    func openIssueCounts() async throws -> GitHubIssueCounts {
+        let issues = try await listIssues(state: "open", limit: 1000)
+        return GitHubIssueCounts(
+            todo: issues.filter { $0.boardStatus == .todo }.count,
+            inProgress: issues.filter { $0.boardStatus == .inProgress }.count
+        )
+    }
+
+    private func listIssues(state: String, limit: Int) async throws -> [GitHubIssue] {
         let output = try await GitHubCommandRunner(workingDirectory: repositoryPath).run(
             [
                 "issue", "list",
-                "--state", "all",
-                "--limit", "200",
+                "--state", state,
+                "--limit", String(limit),
                 "--json", "number,title,state,labels,assignees,updatedAt,url"
             ],
             timeout: Self.requestTimeout

@@ -34,6 +34,51 @@ struct GitHubIssueLabel: Hashable {
     let color: String
 }
 
+struct GitHubIssueCounts {
+    let todo: Int
+    let inProgress: Int
+}
+
+struct RepoIssueSidebarStatus {
+    var todoCount: Int
+    var inProgressCount: Int
+    var isLoading: Bool = false
+    var errorMessage: String?
+
+    init(
+        todoCount: Int,
+        inProgressCount: Int,
+        isLoading: Bool = false,
+        errorMessage: String? = nil
+    ) {
+        self.todoCount = todoCount
+        self.inProgressCount = inProgressCount
+        self.isLoading = isLoading
+        self.errorMessage = errorMessage
+    }
+
+    init(counts: GitHubIssueCounts) {
+        todoCount = counts.todo
+        inProgressCount = counts.inProgress
+    }
+
+    static func loading(from previous: RepoIssueSidebarStatus?) -> RepoIssueSidebarStatus {
+        RepoIssueSidebarStatus(
+            todoCount: previous?.todoCount ?? 0,
+            inProgressCount: previous?.inProgressCount ?? 0,
+            isLoading: true
+        )
+    }
+
+    static func failed(_ message: String, previous: RepoIssueSidebarStatus?) -> RepoIssueSidebarStatus {
+        RepoIssueSidebarStatus(
+            todoCount: previous?.todoCount ?? 0,
+            inProgressCount: previous?.inProgressCount ?? 0,
+            errorMessage: message
+        )
+    }
+}
+
 struct GitHubIssue: Identifiable, Hashable {
     let number: Int
     let title: String

@@ -8,8 +8,11 @@ final class AppStore: ObservableObject {
     @Published var repositories: [Repository] = []
     @Published var selectedRepoID: Repository.ID?
     @Published private(set) var sidebarStatuses: [Repository.ID: RepoSidebarStatus] = [:]
+    @Published private(set) var issueSidebarStatuses: [Repository.ID: RepoIssueSidebarStatus] = [:]
     @Published private(set) var isFetchingActive = false
+    @Published private(set) var isFetchingActiveIssues = false
     private var sidebarStatusGenerations: [Repository.ID: Int] = [:]
+    private var issueSidebarStatusGenerations: [Repository.ID: Int] = [:]
     private var lastActiveSidebarStatusRefreshAt: Date?
 
     // Loaded data for the selected repo
@@ -21,6 +24,7 @@ final class AppStore: ObservableObject {
 
     // UI state
     @Published private(set) var isLoading = false
+    @Published private(set) var isIssueBoardMode = false
     @Published var busyMessage: String?
     @Published var errorMessage: String?
     /// Offered after a non-fast-forward push so the user can update remote refs
@@ -76,6 +80,16 @@ final class AppStore: ObservableObject {
     var selectedRepo: Repository? { repositories.first { $0.id == selectedRepoID } }
     var activeRepositories: [Repository] { repositories(in: .active) }
     var inactiveRepositories: [Repository] { repositories(in: .inactive) }
+
+    func setIssueBoardMode(_ enabled: Bool) {
+        guard isIssueBoardMode != enabled else { return }
+        isIssueBoardMode = enabled
+        if enabled {
+            refreshActiveIssueStatuses()
+        } else {
+            refreshActiveSidebarStatuses()
+        }
+    }
 
     /// Branches the user can merge into the current one (everything but HEAD).
     var mergeableBranches: [Branch] {
@@ -177,6 +191,8 @@ final class AppStore: ObservableObject {
         repositories.removeAll { $0.id == repo.id }
         sidebarStatuses[repo.id] = nil
         sidebarStatusGenerations[repo.id] = nil
+        issueSidebarStatuses[repo.id] = nil
+        issueSidebarStatusGenerations[repo.id] = nil
         persist()
         if selectedRepoID == repo.id {
             select(repositories.first?.id)
@@ -216,9 +232,14 @@ final class AppStore: ObservableObject {
         if oldGroup != group {
             if group == .active {
                 refreshSidebarStatus(for: moving)
+                if isIssueBoardMode {
+                    refreshIssueSidebarStatus(for: moving)
+                }
             } else {
                 sidebarStatuses[repoID] = nil
                 sidebarStatusGenerations[repoID] = nil
+                issueSidebarStatuses[repoID] = nil
+                issueSidebarStatusGenerations[repoID] = nil
             }
         }
     }
@@ -630,6 +651,74 @@ final class AppStore: ObservableObject {
 
     private func repositoryIsActive(_ id: Repository.ID) -> Bool {
         repositories.first { $0.id == id }?.group == .active
+    }
+
+    // MARK: - Sidebar Issue status
+
+    func refreshActiveIssueStatuses() {
+        guard !isFetchingActiveIssues else { return }
+        let repos = activeRepositories
+        let activeIDs = Set(repos.map(\.id))
+        issueSidebarStatuses = issueSidebarStatuses.filter { activeIDs.contains($0.key) }
+        issueSidebarStatusGenerations = issueSidebarStatusGenerations.filter { activeIDs.contains($0.key) }
+        guard !repos.isEmpty else { return }
+
+        isFetchingActiveIssues = true
+        Task {
+            for repo in repos {
+                guard repositoryIsActive(repo.id) else { continue }
+                let generation = bumpIssueSidebarStatusGeneration(for: repo.id)
+                issueSidebarStatuses[repo.id] = .loading(from: issueSidebarStatuses[repo.id])
+                let service = GitHubIssueService(repositoryPath: repo.path)
+
+                do {
+                    let counts = try await service.openIssueCounts()
+                    guard isCurrentIssueSidebarStatusLoad(repo.id, generation: generation),
+                          repositoryIsActive(repo.id) else { continue }
+                    issueSidebarStatuses[repo.id] = RepoIssueSidebarStatus(counts: counts)
+                } catch {
+                    guard isCurrentIssueSidebarStatusLoad(repo.id, generation: generation),
+                          repositoryIsActive(repo.id) else { continue }
+                    issueSidebarStatuses[repo.id] = .failed(
+                        GitHubIssueService.friendlyMessage(error),
+                        previous: issueSidebarStatuses[repo.id]
+                    )
+                }
+            }
+            isFetchingActiveIssues = false
+        }
+    }
+
+    func refreshIssueSidebarStatus(for repo: Repository) {
+        guard repositoryIsActive(repo.id) else { return }
+        let generation = bumpIssueSidebarStatusGeneration(for: repo.id)
+        issueSidebarStatuses[repo.id] = .loading(from: issueSidebarStatuses[repo.id])
+        let service = GitHubIssueService(repositoryPath: repo.path)
+        Task {
+            do {
+                let counts = try await service.openIssueCounts()
+                guard isCurrentIssueSidebarStatusLoad(repo.id, generation: generation),
+                      repositoryIsActive(repo.id) else { return }
+                issueSidebarStatuses[repo.id] = RepoIssueSidebarStatus(counts: counts)
+            } catch {
+                guard isCurrentIssueSidebarStatusLoad(repo.id, generation: generation),
+                      repositoryIsActive(repo.id) else { return }
+                issueSidebarStatuses[repo.id] = .failed(
+                    GitHubIssueService.friendlyMessage(error),
+                    previous: issueSidebarStatuses[repo.id]
+                )
+            }
+        }
+    }
+
+    private func bumpIssueSidebarStatusGeneration(for id: Repository.ID) -> Int {
+        let generation = (issueSidebarStatusGenerations[id] ?? 0) + 1
+        issueSidebarStatusGenerations[id] = generation
+        return generation
+    }
+
+    private func isCurrentIssueSidebarStatusLoad(_ id: Repository.ID, generation: Int) -> Bool {
+        issueSidebarStatusGenerations[id] == generation
     }
 
     // MARK: - Actions

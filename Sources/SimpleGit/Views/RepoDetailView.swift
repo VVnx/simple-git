@@ -4,7 +4,6 @@ struct RepoDetailView: View {
     @EnvironmentObject var store: AppStore
     @StateObject private var issueBoardModel = IssueBoardModel()
     @State private var showMergeConfirm = false
-    @State private var showIssueBoard = false
     @State private var showingNewIssue = false
 
     var body: some View {
@@ -17,7 +16,7 @@ struct RepoDetailView: View {
                 )
             } else if let repository = store.selectedRepo {
                 VStack(spacing: 0) {
-                    if showIssueBoard {
+                    if store.isIssueBoardMode {
                         IssueBoardView(
                             repository: repository,
                             model: issueBoardModel,
@@ -48,7 +47,7 @@ struct RepoDetailView: View {
                     )
                 }
                 .animation(.easeInOut(duration: 0.2), value: store.selection)
-                .animation(.easeInOut(duration: 0.2), value: showIssueBoard)
+                .animation(.easeInOut(duration: 0.2), value: store.isIssueBoardMode)
             }
         }
         .overlay(alignment: .top) {
@@ -111,9 +110,10 @@ struct RepoDetailView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup {
-            if showIssueBoard {
+            if store.isIssueBoardMode {
                 Button {
                     guard let repository = store.selectedRepo else { return }
+                    store.refreshIssueSidebarStatus(for: repository)
                     Task { await issueBoardModel.load(repository: repository) }
                 } label: {
                     Label("刷新 Issues", systemImage: "arrow.clockwise")
@@ -170,34 +170,6 @@ struct RepoDetailView: View {
                       : "把所选提交合并到当前分支(会二次确认)")
             }
 
-            HStack(spacing: 7) {
-                Label(
-                    showIssueBoard ? "看板模式" : "切换到看板",
-                    systemImage: showIssueBoard ? "rectangle.3.group.fill" : "rectangle.3.group"
-                )
-                .font(.callout.weight(.medium))
-                .foregroundStyle(showIssueBoard ? Color.accentColor : Color.primary)
-
-                Toggle("", isOn: $showIssueBoard)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                showIssueBoard ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.05),
-                in: Capsule()
-            )
-            .overlay {
-                Capsule()
-                    .strokeBorder(
-                        showIssueBoard ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.1),
-                        lineWidth: 1
-                    )
-            }
-            .fixedSize()
-            .help(showIssueBoard ? "关闭看板并返回提交图" : "打开当前仓库的 GitHub Issue 看板")
         }
     }
 }

@@ -73,11 +73,7 @@ struct IssueBoardView: View {
     @Binding var showingNewIssue: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            boardHeader
-            Divider()
-            boardContent
-        }
+        boardContent
         .background(
             LinearGradient(
                 colors: [
@@ -116,39 +112,6 @@ struct IssueBoardView: View {
         } message: {
             Text(model.actionError ?? "")
         }
-    }
-
-    private var boardHeader: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
-                    Image(systemName: "rectangle.3.group.fill")
-                        .foregroundStyle(.tint)
-                    Text("Issue 看板")
-                        .font(.headline)
-                }
-                Text("\(repository.displayName) · 最近更新的 \(model.issues.count) 条")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let success = model.successMessage {
-                Label(success, systemImage: "checkmark.circle.fill")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.green)
-                    .transition(.opacity.combined(with: .scale))
-            }
-
-            Spacer()
-
-            if model.isLoading {
-                ProgressView()
-                    .controlSize(.small)
-            }
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 58)
-        .animation(.easeInOut(duration: 0.2), value: model.successMessage)
     }
 
     @ViewBuilder
