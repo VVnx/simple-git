@@ -35,83 +35,57 @@ struct SidebarView: View {
                     .font(.callout)
             }
         }
+        .safeAreaInset(edge: .top) {
+            modeSwitcher
+                .padding(.horizontal, 10)
+                .padding(.top, 10)
+                .padding(.bottom, 7)
+        }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 7) {
-                HStack(spacing: 8) {
-                    Label("Git 模式", systemImage: "point.3.connected.trianglepath.dotted")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(store.isIssueBoardMode ? Color.secondary : Color.accentColor)
-
-                    Toggle("", isOn: issueBoardModeBinding)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-
-                    Label("看板模式", systemImage: "rectangle.3.group")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(store.isIssueBoardMode ? Color.accentColor : Color.secondary)
+            HStack {
+                Button {
+                    showAddMenu.toggle()
+                } label: {
+                    SidebarFooterIcon(systemName: "plus")
                 }
-                .padding(.horizontal, 9)
-                .frame(height: 34)
-                .frame(maxWidth: .infinity)
-                .background(
-                    store.isIssueBoardMode ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.05),
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(
-                            store.isIssueBoardMode ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.1),
-                            lineWidth: 1
-                        )
-                }
-                .help(store.isIssueBoardMode ? "当前为看板模式,关闭后切换到 Git 模式" : "当前为 Git 模式,开启后切换到看板模式")
-
-                HStack {
-                    Button {
-                        showAddMenu.toggle()
-                    } label: {
-                        SidebarFooterIcon(systemName: "plus")
-                    }
-                    .buttonStyle(SidebarFooterButtonStyle())
-                    .disabled(store.isRepositoryOperationInProgress)
-                    .help("添加仓库:打开本地或克隆 URL")
-                    .popover(isPresented: $showAddMenu, arrowEdge: .bottom) {
-                        AddRepositoryPopover(
-                            onOpenLocal: {
-                                showAddMenu = false
-                                addLocalRepo()
-                            },
-                            onClone: {
-                                showAddMenu = false
-                                showCloneSheet = true
-                            }
-                        )
-                    }
-
-                    Spacer()
-
-                    Button {
-                        if store.isIssueBoardMode {
-                            store.refreshActiveIssueStatuses()
-                        } else {
-                            store.fetchActiveRepositories()
+                .buttonStyle(SidebarFooterButtonStyle())
+                .disabled(store.isRepositoryOperationInProgress)
+                .help("添加仓库:打开本地或克隆 URL")
+                .popover(isPresented: $showAddMenu, arrowEdge: .bottom) {
+                    AddRepositoryPopover(
+                        onOpenLocal: {
+                            showAddMenu = false
+                            addLocalRepo()
+                        },
+                        onClone: {
+                            showAddMenu = false
+                            showCloneSheet = true
                         }
-                    } label: {
-                        if activeRefreshInProgress {
-                            ProgressView()
-                                .controlSize(.small)
-                                .frame(width: SidebarFooterIcon.size, height: SidebarFooterIcon.size)
-                        } else {
-                            SidebarFooterIcon(systemName: "arrow.clockwise")
-                        }
-                    }
-                    .buttonStyle(SidebarFooterButtonStyle())
-                    .disabled(activeRefreshInProgress)
-                    .help(store.isIssueBoardMode
-                          ? "刷新 Active 仓库的待处理、开发中与待 Review Issue 数量"
-                          : "刷新 Active 仓库:fetch 并读取最新状态")
+                    )
                 }
+
+                Spacer()
+
+                Button {
+                    if store.isIssueBoardMode {
+                        store.refreshActiveIssueStatuses()
+                    } else {
+                        store.fetchActiveRepositories()
+                    }
+                } label: {
+                    if activeRefreshInProgress {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: SidebarFooterIcon.size, height: SidebarFooterIcon.size)
+                    } else {
+                        SidebarFooterIcon(systemName: "arrow.clockwise")
+                    }
+                }
+                .buttonStyle(SidebarFooterButtonStyle())
+                .disabled(activeRefreshInProgress)
+                .help(store.isIssueBoardMode
+                      ? "刷新 Active 仓库的待处理、开发中与待 Review Issue 数量"
+                      : "刷新 Active 仓库:fetch 并读取最新状态")
             }
             .padding(10)
         }
@@ -134,6 +108,38 @@ struct SidebarView: View {
         } message: { _ in
             Text("仅从列表移除,不会删除磁盘上的文件。")
         }
+    }
+
+    private var modeSwitcher: some View {
+        HStack(spacing: 8) {
+            Label("Git 模式", systemImage: "point.3.connected.trianglepath.dotted")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(store.isIssueBoardMode ? Color.secondary : Color.accentColor)
+
+            Toggle("", isOn: issueBoardModeBinding)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+
+            Label("看板模式", systemImage: "rectangle.3.group")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(store.isIssueBoardMode ? Color.accentColor : Color.secondary)
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 34)
+        .frame(maxWidth: .infinity)
+        .background(
+            store.isIssueBoardMode ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.05),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(
+                    store.isIssueBoardMode ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.1),
+                    lineWidth: 1
+                )
+        }
+        .help(store.isIssueBoardMode ? "当前为看板模式,关闭后切换到 Git 模式" : "当前为 Git 模式,开启后切换到看板模式")
     }
 
     @ViewBuilder
