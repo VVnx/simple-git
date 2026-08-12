@@ -111,6 +111,16 @@ struct RepoDetailView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup {
             if store.isIssueBoardMode {
+                if let currentUser = issueBoardModel.currentUser {
+                    HStack(spacing: 4) {
+                        Text("只看我的")
+                        Toggle("只看我的", isOn: $issueBoardModel.showOnlyMine.animation(.easeInOut(duration: 0.15)))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                    .help("只显示由 @\(currentUser) 提交的 Issue")
+                }
+
                 Button {
                     guard let repository = store.selectedRepo else { return }
                     guard store.beginCurrentIssueRefresh() else { return }
@@ -137,12 +147,6 @@ struct RepoDetailView: View {
                         || store.selectedRepo == nil
                 )
                 .help("重新读取当前仓库的 GitHub Issue 列表")
-
-                if let currentUser = issueBoardModel.currentUser {
-                    Toggle("只看我的", isOn: $issueBoardModel.showOnlyMine.animation(.easeInOut(duration: 0.15)))
-                        .toggleStyle(.switch)
-                        .help("只显示由 @\(currentUser) 提交的 Issue")
-                }
 
                 Button {
                     showingNewIssue = true
