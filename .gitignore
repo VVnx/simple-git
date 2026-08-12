@@ -7,3 +7,4 @@ xcuserdata/
 !*.xcodeproj/project.pbxproj
 .netrc
 /dist
+/.workbuddy
