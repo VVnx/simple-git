@@ -133,10 +133,7 @@ struct IssueBoardView: View {
     @Binding var showingNewIssue: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            boardToolbar
-            boardContent
-        }
+        boardContent
         .background(
             LinearGradient(
                 colors: [
@@ -176,38 +173,6 @@ struct IssueBoardView: View {
             Button("好") { model.actionError = nil }
         } message: {
             Text(model.actionError ?? "")
-        }
-    }
-
-    private var boardToolbar: some View {
-        HStack(spacing: 10) {
-            Spacer()
-
-            if let currentUser = model.currentUser {
-                Toggle("只看我的", isOn: $model.showOnlyMine.animation(.easeInOut(duration: 0.15)))
-                    .help("只显示由 @\(currentUser) 提交的 Issue")
-                    .toggleStyle(.switch)
-            } else {
-                ProgressView()
-                    .controlSize(.small)
-                Text("正在读取当前用户…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Button {
-                Task { await model.load(repository: repository) }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .help("刷新看板")
-            .disabled(model.isLoading)
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 44)
-        .background(.bar)
-        .overlay(alignment: .bottom) {
-            Divider()
         }
     }
 
