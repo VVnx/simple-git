@@ -181,6 +181,8 @@ struct IssueBoardView: View {
 
     private var boardToolbar: some View {
         HStack(spacing: 10) {
+            Spacer()
+
             if let currentUser = model.currentUser {
                 Toggle("只看我的", isOn: $model.showOnlyMine.animation(.easeInOut(duration: 0.15)))
                     .help("只显示由 @\(currentUser) 提交的 Issue")
@@ -192,8 +194,6 @@ struct IssueBoardView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
-            Spacer()
 
             Button {
                 Task { await model.load(repository: repository) }
@@ -396,8 +396,22 @@ private struct IssueCard: View {
                         .lineLimit(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    if !issue.labels.isEmpty {
+                    if !issue.labels.isEmpty || issue.author != nil {
                         HStack(spacing: 5) {
+                            if let author = issue.author {
+                                Label {
+                                    Text("由 @\(author) 提交")
+                                        .font(.caption2.weight(.medium))
+                                } icon: {
+                                    Image(systemName: "person.circle")
+                                        .font(.caption2)
+                                }
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(Color.secondary.opacity(0.12), in: Capsule())
+                            }
                             ForEach(Array(issue.labels.prefix(2)), id: \.self) { label in
                                 Text(label.name)
                                     .font(.caption2.weight(.medium))
@@ -420,18 +434,6 @@ private struct IssueCard: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                    }
-
-                    if let author = issue.author {
-                        Label {
-                            Text("由 @\(author) 提交")
-                                .font(.caption2)
-                        } icon: {
-                            Image(systemName: "person.circle")
-                                .font(.caption2)
-                        }
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                     }
                 }
                 .padding(11)
