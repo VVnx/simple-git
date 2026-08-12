@@ -93,12 +93,16 @@ struct GitHubIssue: Identifiable, Hashable {
     let number: Int
     let title: String
     let state: GitHubIssueState
+    let author: String?
     let labels: [GitHubIssueLabel]
     let assignees: [String]
     let updatedAt: Date
     let url: URL
 
     var id: Int { number }
+
+    /// 提交人用户名(由 GitHub 登录名解析),用于“只看我的”过滤与卡片展示。
+    var authorLogin: String? { author }
 
     var boardStatus: IssueBoardStatus {
         guard state == .open else { return .done }

@@ -12,13 +12,20 @@ final class IssueBoardModel: ObservableObject {
     @Published var successMessage: String?
     @Published private(set) var updatingIssueNumber: Int?
     @Published private(set) var statusUpdateError: String?
+    /// 当前已登录 GitHub 用户登录名,用于“只看我的”过滤。
+    @Published private(set) var currentUser: String?
+    /// “只看我的”:只展示由当前用户提交的 Issue。
+    @Published var showOnlyMine = false
 
     private var activeRepositoryPath: String?
     private var loadedRepositoryPath: String?
     private var successClearTask: Task<Void, Never>?
 
     func issues(for status: IssueBoardStatus) -> [GitHubIssue] {
-        issues.filter { $0.boardStatus == status }
+        let visible = showOnlyMine
+            ? issues.filter { $0.author != nil && $0.author == currentUser }
+            : issues
+        return visible.filter { $0.boardStatus == status }
     }
 
     func issue(number: Int) -> GitHubIssue? {
@@ -67,11 +74,13 @@ final class IssueBoardModel: ObservableObject {
         loadError = nil
 
         do {
-            let loaded = try await GitHubIssueService(repositoryPath: path).listIssues()
+            let service = GitHubIssueService(repositoryPath: path)
+            let loaded = try await service.listIssues()
             guard !Task.isCancelled, activeRepositoryPath == path else { return false }
             issues = loaded
             loadedRepositoryPath = path
             isLoading = false
+            fetchCurrentUser(using: service, path: path)
             return true
         } catch {
             guard !Task.isCancelled, activeRepositoryPath == path else { return false }
@@ -99,6 +108,13 @@ final class IssueBoardModel: ObservableObject {
         }
     }
 
+    private func fetchCurrentUser(using service: GitHubIssueService, path: String) {
+        Task {
+            guard activeRepositoryPath == path else { return }
+            currentUser = try? await GitHubIssueService(repositoryPath: path).currentUser()
+        }
+    }
+
     private func flashSuccess(_ text: String) {
         successClearTask?.cancel()
         successMessage = text
@@ -117,7 +133,10 @@ struct IssueBoardView: View {
     @Binding var showingNewIssue: Bool
 
     var body: some View {
-        boardContent
+        VStack(spacing: 0) {
+            boardToolbar
+            boardContent
+        }
         .background(
             LinearGradient(
                 colors: [
@@ -157,6 +176,38 @@ struct IssueBoardView: View {
             Button("好") { model.actionError = nil }
         } message: {
             Text(model.actionError ?? "")
+        }
+    }
+
+    private var boardToolbar: some View {
+        HStack(spacing: 10) {
+            if let currentUser = model.currentUser {
+                Toggle("只看我的", isOn: $model.showOnlyMine.animation(.easeInOut(duration: 0.15)))
+                    .help("只显示由 @\(currentUser) 提交的 Issue")
+                    .toggleStyle(.switch)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+                Text("正在读取当前用户…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                Task { await model.load(repository: repository) }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .help("刷新看板")
+            .disabled(model.isLoading)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 44)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
         }
     }
 
@@ -370,6 +421,18 @@ private struct IssueCard: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
+
+                    if let author = issue.author {
+                        Label {
+                            Text("由 @\(author) 提交")
+                                .font(.caption2)
+                        } icon: {
+                            Image(systemName: "person.circle")
+                                .font(.caption2)
+                        }
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    }
                 }
                 .padding(11)
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -380,7 +443,10 @@ private struct IssueCard: View {
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             .buttonStyle(.plain)
-            .help("在 GitHub 打开 Issue #\(issue.number)")
+            .help(
+                "在 GitHub 打开 Issue #\(issue.number)" +
+                (issue.author.map { " · 由 @\($0) 提交" } ?? "")
+            )
 
             Button(action: copyLink) {
                 Image(systemName: linkCopied ? "checkmark" : "doc.on.doc")

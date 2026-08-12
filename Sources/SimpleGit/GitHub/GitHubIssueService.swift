@@ -42,7 +42,7 @@ struct GitHubIssueService {
                 "issue", "list",
                 "--state", state,
                 "--limit", String(limit),
-                "--json", "number,title,state,labels,assignees,updatedAt,url"
+                "--json", "number,title,state,author,labels,assignees,updatedAt,url"
             ],
             timeout: Self.requestTimeout
         )
@@ -54,6 +54,7 @@ struct GitHubIssueService {
                     number: payload.number,
                     title: payload.title,
                     state: GitHubIssueState(rawValue: payload.state) ?? .open,
+                    author: payload.author?.login,
                     labels: payload.labels.map { GitHubIssueLabel(name: $0.name, color: $0.color) },
                     assignees: payload.assignees.map(\.login),
                     updatedAt: Self.parseDate(payload.updatedAt) ?? .distantPast,
@@ -64,6 +65,19 @@ struct GitHubIssueService {
         } catch {
             throw SimpleGitError("GitHub 返回了无法识别的 Issue 数据,请升级 GitHub CLI 后重试。")
         }
+    }
+
+    /// 当前已登录 GitHub 用户的登录名,用于“只看我的”过滤。
+    func currentUser() async throws -> String {
+        let output = try await GitHubCommandRunner(workingDirectory: repositoryPath).run(
+            ["api", "user", "--jq", ".login"],
+            timeout: Self.requestTimeout
+        )
+        let login = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !login.isEmpty else {
+            throw SimpleGitError("无法读取当前 GitHub 用户名。")
+        }
+        return login
     }
 
     @discardableResult
@@ -225,6 +239,7 @@ struct GitHubIssueService {
             number: issue.number,
             title: issue.title,
             state: state,
+            author: issue.author,
             labels: labels,
             assignees: issue.assignees,
             updatedAt: Date(),
@@ -248,6 +263,7 @@ struct GitHubIssueService {
         let number: Int
         let title: String
         let state: String
+        let author: AuthorPayload?
         let labels: [LabelPayload]
         let assignees: [AssigneePayload]
         let updatedAt: String
@@ -257,6 +273,10 @@ struct GitHubIssueService {
     private struct LabelPayload: Decodable {
         let name: String
         let color: String
+    }
+
+    private struct AuthorPayload: Decodable {
+        let login: String
     }
 
     private struct AssigneePayload: Decodable {
