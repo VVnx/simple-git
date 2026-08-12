@@ -112,14 +112,15 @@ struct RepoDetailView: View {
         ToolbarItemGroup {
             if store.isIssueBoardMode {
                 if let currentUser = issueBoardModel.currentUser {
-                    HStack(spacing: 6) {
-                        Text("只看我的")
-                            .font(.callout)
-                        Toggle("只看我的", isOn: $issueBoardModel.showOnlyMine.animation(.easeInOut(duration: 0.15)))
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                            .labelsHidden()
+                    Toggle(isOn: $issueBoardModel.showOnlyMine.animation(.easeInOut(duration: 0.15))) {
+                        Label(
+                            "只看我的",
+                            systemImage: issueBoardModel.showOnlyMine
+                                ? "person.crop.circle.fill"
+                                : "person.crop.circle"
+                        )
                     }
+                    .toggleStyle(.button)
                     .help("只显示由 @\(currentUser) 提交的 Issue")
                 }
 
