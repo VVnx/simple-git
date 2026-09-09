@@ -41,8 +41,8 @@ struct RepoDetailView: View {
                     StatusBarView(
                         status: store.status,
                         onTapBranch: { store.locateCurrentHead() },
-                        onOpenCodex: { store.openExternalApp("Codex") },
-                        onOpenClaude: { store.openExternalApp("Claude") },
+                        onOpenCodex: { store.openCodexProject() },
+                        onOpenClaude: { store.openClaudeProject() },
                         onOpenVSCode: { store.openExternalApp("Visual Studio Code", path: store.selectedRepo?.path) }
                     )
                 }

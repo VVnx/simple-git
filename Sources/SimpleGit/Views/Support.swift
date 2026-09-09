@@ -166,6 +166,7 @@ struct StatusBarView: View {
                                 glyph(ToolGlyph.codex, fallback: "chevron.left.forwardslash.chevron.right")
                             }
                         }
+                        .help("在 Codex 中打开当前项目")
                     }
                     if let onOpenClaude {
                         Button(action: onOpenClaude) {
@@ -175,6 +176,7 @@ struct StatusBarView: View {
                                 glyph(ToolGlyph.claude, fallback: "sparkles")
                             }
                         }
+                        .help("在 Claude Code 中打开当前项目")
                     }
                     if let onOpenVSCode {
                         Button(action: onOpenVSCode) {
