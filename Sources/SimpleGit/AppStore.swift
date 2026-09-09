@@ -26,7 +26,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var isIssueBoardMode = false
     @Published var busyMessage: String?
-    @Published var errorMessage: String?
+    @Published var presentedError: ErrorPresentation?
     /// Offered after a non-fast-forward push so the user can update remote refs
     /// before choosing what to merge into the current branch.
     @Published var showFetchAfterRejectedPush = false
@@ -141,9 +141,9 @@ final class AppStore: ObservableObject {
                 }
                 select(repo.id)
             } catch let error as SimpleGitError {
-                errorMessage = error.errorDescription
+                presentedError = ErrorPresentation(message: error.localizedDescription)
             } catch {
-                errorMessage = "「\(url.lastPathComponent)」不是一个有效的 Git 仓库。"
+                presentedError = ErrorPresentation(message: "「\(url.lastPathComponent)」不是一个有效的 Git 仓库。")
             }
         }
     }
@@ -270,7 +270,7 @@ final class AppStore: ObservableObject {
     }
 
     func refreshCurrentRepository() {
-        perform("正在刷新…", success: "刷新完成") { try await $0.fetch() }
+        perform("正在刷新…", success: "刷新完成", failureTitle: "刷新失败") { try await $0.fetch() }
     }
 
     private func selectUnlocked(_ id: Repository.ID?) {
@@ -394,11 +394,11 @@ final class AppStore: ObservableObject {
         // URLSearchParams treats a literal + as a space, so encode it in folder names too.
         components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         guard let url = components.url else {
-            errorMessage = "无法生成 \(appName) 项目链接。"
+            presentedError = ErrorPresentation(message: "无法生成 \(appName) 项目链接。")
             return
         }
         if !NSWorkspace.shared.open(url) {
-            errorMessage = "无法在 \(appName) 中打开当前项目，请确认已安装支持项目链接的客户端。"
+            presentedError = ErrorPresentation(message: "无法在 \(appName) 中打开当前项目，请确认已安装支持项目链接的客户端。")
         }
     }
 
@@ -536,7 +536,7 @@ final class AppStore: ObservableObject {
             clearLoadedData()
             let text = loadErrorText(error, repo: repo)
             publishSidebarError(text, for: repo)
-            errorMessage = text
+            presentedError = ErrorPresentation(message: text)
             isLoading = false
         }
     }
@@ -768,7 +768,7 @@ final class AppStore: ObservableObject {
         if succeeded {
             flashSuccess("Issues 刷新完成")
         } else {
-            errorMessage = error ?? "Issue 刷新失败。"
+            presentedError = ErrorPresentation(message: error ?? "Issue 刷新失败。")
         }
     }
 
@@ -790,7 +790,7 @@ final class AppStore: ObservableObject {
         if succeeded {
             flashSuccess("Issue #\(issueNumber) 已移至「\(target.title)」")
         } else {
-            errorMessage = error ?? "Issue 状态更新失败。"
+            presentedError = ErrorPresentation(message: error ?? "Issue 状态更新失败。")
         }
     }
 
@@ -807,14 +807,14 @@ final class AppStore: ObservableObject {
 
     // MARK: - Actions
 
-    func fetch() { perform("正在 Fetch…", success: "Fetch 完成") { try await $0.fetch() } }
+    func fetch() { perform("正在 Fetch…", success: "Fetch 完成", failureTitle: "Fetch 失败") { try await $0.fetch() } }
 
-    func pull() { perform("正在 Pull…", success: "Pull 完成") { try await $0.pull() } }
+    func pull() { perform("正在 Pull…", success: "Pull 完成", failureTitle: "Pull 失败") { try await $0.pull() } }
 
     func push() {
         // Capture status on the main actor before handing work to the background.
         let current = status
-        perform("正在 Push…", success: "Push 成功", offerFetchAfterRejectedPush: true) { service in
+        perform("正在 Push…", success: "Push 成功", failureTitle: "Push 失败", offerFetchAfterRejectedPush: true) { service in
             if let current, current.upstream == nil, !current.detached {
                 // No upstream yet — set one against the repo's remote so a freshly
                 // created branch pushes without the user typing a command.
@@ -835,7 +835,7 @@ final class AppStore: ObservableObject {
     }
 
     func mergeCommit(_ commit: Commit) {
-        perform("正在 Merge \(commit.shortHash)…", success: "已合并 \(commit.shortHash)") {
+        perform("正在 Merge \(commit.shortHash)…", success: "已合并 \(commit.shortHash)", failureTitle: "Merge 失败") {
             try await $0.merge(commit.hash)
         }
     }
@@ -843,6 +843,7 @@ final class AppStore: ObservableObject {
     private func perform(
         _ message: String,
         success: String,
+        failureTitle: String,
         offerFetchAfterRejectedPush: Bool = false,
         _ op: @escaping (GitService) async throws -> Void
     ) {
@@ -876,7 +877,16 @@ final class AppStore: ObservableObject {
                    Self.isPushRejectedBecauseRemoteHasUpdates(operationError) {
                     showFetchAfterRejectedPush = true
                 } else {
-                    errorMessage = Self.friendlyGitMessage(operationError)
+                    var details = "仓库：\(repo.path)\n"
+                    if let gitError = operationError as? GitError {
+                        details += "命令：\(gitError.command)\n退出码：\(gitError.exitCode)\n\n"
+                    }
+                    details += operationError.localizedDescription
+                    presentedError = ErrorPresentation(
+                        title: failureTitle,
+                        message: Self.friendlyGitMessage(operationError),
+                        details: details
+                    )
                 }
             }
         }
@@ -891,8 +901,7 @@ final class AppStore: ObservableObject {
     }
 
     /// Maps raw `git` stderr into a short, actionable Chinese message for the
-    /// error alert. Falls back to the raw text with git's verbose `hint:` noise
-    /// stripped, so even unrecognized errors read more cleanly.
+    /// error sheet. Unknown errors use a bounded summary; raw logs stay in details.
     static func friendlyGitMessage(_ error: Error) -> String {
         if let simple = error as? SimpleGitError { return simple.message }
         if let timeout = error as? GitTimeoutError {
@@ -906,6 +915,10 @@ final class AppStore: ObservableObject {
 
         if isPushRejectedBecauseRemoteHasUpdates(error) {
             return "推送被拒绝:远端有你本地还没有的提交。请先 Pull 拉取合并,再 Push。"
+        }
+        if lower.contains("timeout, server") || lower.contains("connection timed out")
+            || lower.contains("unexpected disconnect") || lower.contains("remote end hung up") {
+            return "与远程仓库的连接超时或中断。请检查网络连接，稍后重试。"
         }
         if lower.contains("permission denied") || lower.contains("authentication failed")
             || lower.contains("could not read from remote") {
@@ -922,13 +935,7 @@ final class AppStore: ObservableObject {
             return "找不到远程仓库或对应分支,检查 remote 配置是否正确。"
         }
 
-        // Fallback: drop git's verbose "hint:" lines, keep the real error.
-        let core = raw
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .filter { !$0.lowercased().hasPrefix("hint:") }
-            .joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return core.isEmpty ? raw : core
+        return ErrorMessageFormatter.summary(raw)
     }
 
     /// Shows a transient success banner that fades out on its own.
