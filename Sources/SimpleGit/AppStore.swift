@@ -374,6 +374,34 @@ final class AppStore: ObservableObject {
         flashSuccess("已复制 hash \(commit.shortHash)")
     }
 
+    func openCodexProject() {
+        openProjectLink(appName: "Codex", scheme: "codex", host: "threads", pathParameter: "path")
+    }
+
+    func openClaudeProject() {
+        openProjectLink(appName: "Claude", scheme: "claude", host: "code", pathParameter: "folder")
+    }
+
+    /// Opens the new-task composer with the selected repository as its working directory.
+    /// Codex: codex://threads/new?path=…; Claude: claude://code/new?folder=…
+    private func openProjectLink(appName: String, scheme: String, host: String, pathParameter: String) {
+        guard let repo = selectedRepo else { return }
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = host
+        components.path = "/new"
+        components.queryItems = [URLQueryItem(name: pathParameter, value: repo.path)]
+        // URLSearchParams treats a literal + as a space, so encode it in folder names too.
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        guard let url = components.url else {
+            errorMessage = "无法生成 \(appName) 项目链接。"
+            return
+        }
+        if !NSWorkspace.shared.open(url) {
+            errorMessage = "无法在 \(appName) 中打开当前项目，请确认已安装支持项目链接的客户端。"
+        }
+    }
+
     /// Launches an external app via `open -a`, optionally opening `path` with it
     /// (e.g. opening the current repo folder in VS Code).
     func openExternalApp(_ appName: String, path: String? = nil) {
