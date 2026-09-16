@@ -154,6 +154,7 @@ struct CommitRowView: View {
     private var refHelp: String {
         let names = refs.map { ref in
             switch ref.kind {
+            case .head: return "HEAD (detached)"
             case .tag: return "tag: \(ref.name)"
             case .remoteBranch: return "remote: \(ref.name)"
             default: return "branch: \(ref.name)"
@@ -176,7 +177,8 @@ struct CommitRowView: View {
 
             HStack(spacing: 6) {
                 ForEach(branchRefs) { ref in
-                    RefChip(ref: ref, isCurrent: ref.kind == .localBranch && ref.name == currentBranch)
+                    RefChip(ref: ref, isCurrent: ref.kind == .head
+                            || (ref.kind == .localBranch && ref.name == currentBranch))
                 }
                 Text(node.commit.subject)
                     .lineLimit(1)
@@ -279,6 +281,7 @@ struct RefChip: View {
 
     private var icon: String {
         switch ref.kind {
+        case .head: return "location.fill"
         case .tag: return "tag.fill"
         case .remoteBranch: return "cloud"
         default: return "arrow.triangle.branch"
@@ -289,7 +292,8 @@ struct RefChip: View {
         switch ref.kind {
         case .tag: return .orange
         case .remoteBranch: return .gray
-        case .localBranch, .head: return .blue
+        case .head: return .purple
+        case .localBranch: return .blue
         case .other: return .gray
         }
     }
