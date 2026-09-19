@@ -502,6 +502,11 @@ final class AppStore: ObservableObject {
                     refsMap[raw.commit, default: []].append(Ref(kind: .tag, name: name))
                 }
             }
+            // On a detached HEAD no branch points at the checked-out commit, so
+            // nothing above would label it — inject an explicit HEAD chip.
+            if statusVal.detached, let oid = statusVal.oid, oid != "(initial)" {
+                refsMap[oid, default: []].append(Ref(kind: .head, name: "HEAD"))
+            }
             for key in refsMap.keys {
                 refsMap[key]?.sort { $0.kind.rawValue < $1.kind.rawValue }
             }
