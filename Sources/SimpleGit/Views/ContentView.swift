@@ -19,16 +19,8 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             store.refreshActiveSidebarStatusesOnActivation()
         }
-        .alert(
-            "出错了",
-            isPresented: Binding(
-                get: { store.errorMessage != nil },
-                set: { if !$0 { store.errorMessage = nil } }
-            )
-        ) {
-            Button("好") { store.errorMessage = nil }
-        } message: {
-            Text(store.errorMessage ?? "")
+        .sheet(item: $store.presentedError) { error in
+            ErrorSheet(error: error)
         }
         .alert(
             "远端有新提交",
