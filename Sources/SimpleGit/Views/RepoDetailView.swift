@@ -168,6 +168,7 @@ struct RepoDetailView: View {
                     store.fetch()
                 } label: {
                     Label("Fetch", systemImage: "arrow.down.to.line")
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .labelStyle(.titleAndIcon)
                 .disabled(store.isRepositoryOperationInProgress)
@@ -177,6 +178,7 @@ struct RepoDetailView: View {
                     store.pull()
                 } label: {
                     Label("Pull", systemImage: "arrow.down.circle")
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .labelStyle(.titleAndIcon)
                 .disabled(store.isRepositoryOperationInProgress)
@@ -186,6 +188,7 @@ struct RepoDetailView: View {
                     store.push()
                 } label: {
                     Label("Push", systemImage: "arrow.up.circle")
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .labelStyle(.titleAndIcon)
                 .disabled(store.isRepositoryOperationInProgress)
@@ -195,6 +198,7 @@ struct RepoDetailView: View {
                     showMergeConfirm = true
                 } label: {
                     Label("Merge", systemImage: "arrow.triangle.merge")
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .labelStyle(.titleAndIcon)
                 .disabled(store.isRepositoryOperationInProgress || store.selectedCommit == nil)
