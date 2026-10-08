@@ -44,6 +44,7 @@ final class AppStore: ObservableObject {
     // Within the detail panel: the file whose diff is shown on the right.
     @Published var selectedFilePath: String?
     @Published private(set) var fileDiff: String = ""
+    @Published private(set) var fileImagePreview: FileImagePreview?
     @Published private(set) var isLoadingDiff = false
     private var diffGeneration = 0
 
@@ -339,6 +340,7 @@ final class AppStore: ObservableObject {
     private func resetFileDiff() {
         selectedFilePath = nil
         fileDiff = ""
+        fileImagePreview = nil
         isLoadingDiff = false
         diffGeneration += 1
     }
@@ -346,24 +348,57 @@ final class AppStore: ObservableObject {
     /// Loads the diff for a file within the current selection (commit or working tree).
     func selectFile(_ path: String) {
         selectedFilePath = path
+        fileDiff = ""
+        fileImagePreview = nil
         diffGeneration += 1
         let generation = diffGeneration
         let currentSelection = selection
+        let commit = selectedCommit
+        let changedFile = changedFiles.first { $0.path == path }
+        let workingFile = workingFiles.first { $0.path == path }
+        let oldPath = changedFile?.oldPath ?? workingFile?.oldPath
+        let isImage = FileImagePreview.supports(path: path)
+            || oldPath.map { FileImagePreview.supports(path: $0) } == true
         guard let repo = selectedRepo else { fileDiff = ""; isLoadingDiff = false; return }
         let service = GitService(path: repo.path)
         isLoadingDiff = true
         Task {
             let text: String
+            let preview: FileImagePreview?
             switch currentSelection {
             case .commit(let hash):
-                text = (try? await service.commitFileDiff(hash: hash, path: path)) ?? ""
+                if isImage, let commit, let changedFile {
+                    preview = await service.commitImagePreview(commit: commit, file: changedFile)
+                    text = ""
+                } else {
+                    preview = nil
+                    text = (try? await service.commitFileDiff(hash: hash, path: path)) ?? ""
+                }
             case .uncommitted:
-                text = (try? await service.workingFileDiff(path: path)) ?? ""
+                // Refresh restores the file selection before its new file list
+                // finishes loading. Resolve the status then, so deletions and
+                // renames still use the correct previous version.
+                var file = workingFile
+                if file == nil {
+                    file = (try? await service.workingFiles())?.first { $0.path == path }
+                }
+                let wasImage = file?.oldPath.map { FileImagePreview.supports(path: $0) } == true
+                if isImage || wasImage {
+                    preview = await service.workingImagePreview(
+                        file: file ?? WorkingFile(badge: "?", path: path, oldPath: nil)
+                    )
+                    text = ""
+                } else {
+                    preview = nil
+                    text = (try? await service.workingFileDiff(path: path)) ?? ""
+                }
             case .none:
+                preview = nil
                 text = ""
             }
             guard generation == diffGeneration else { return }
             fileDiff = text
+            fileImagePreview = preview
             isLoadingDiff = false
         }
     }

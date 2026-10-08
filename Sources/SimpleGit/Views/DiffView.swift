@@ -4,6 +4,7 @@ import AppKit
 /// Right-hand pane of a detail panel: shows the selected file's unified diff.
 struct FileDiffPane: View {
     let diff: String
+    let imagePreview: FileImagePreview?
     let isLoading: Bool
     let hasSelection: Bool
 
@@ -15,6 +16,8 @@ struct FileDiffPane: View {
                 ProgressView()
                     .controlSize(.small)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let imagePreview {
+                ImagePreviewPane(preview: imagePreview)
             } else if diff.isEmpty {
                 placeholder("(无文本差异,可能是二进制文件)")
             } else {

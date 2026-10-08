@@ -52,6 +52,11 @@ struct GitRunner {
         )
     }
 
+    /// Binary stdout must not pass through UTF-8 decoding (e.g. image blobs).
+    func runData(_ args: [String]) async throws -> Data {
+        try await Self.runData(args, in: workingDirectory)
+    }
+
     /// Runs `git args...`. `directory` is the working directory (nil to inherit;
     /// callers that need a specific repo usually pass `-C <path>` in `args`).
     /// `allowNonZero` returns stdout instead of throwing on a non-zero exit —
@@ -72,6 +77,25 @@ struct GitRunner {
         idleTimeout: TimeInterval? = nil,
         environment: [String: String] = [:]
     ) async throws -> String {
+        let data = try await runData(
+            args,
+            in: directory,
+            allowNonZero: allowNonZero,
+            timeout: timeout,
+            idleTimeout: idleTimeout,
+            environment: environment
+        )
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func runData(
+        _ args: [String],
+        in directory: String?,
+        allowNonZero: Bool = false,
+        timeout: TimeInterval? = nil,
+        idleTimeout: TimeInterval? = nil,
+        environment: [String: String] = [:]
+    ) async throws -> Data {
         let command = "git " + args.joined(separator: " ")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -113,7 +137,7 @@ struct GitRunner {
         var finished = false
 
         return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data, Error>) in
                 // Resume the continuation exactly once, after the process has exited
                 // (or timed out) AND both pipes have reached EOF — so we never drop
                 // buffered output. Must be called on `stateQueue`.
@@ -129,11 +153,11 @@ struct GitRunner {
                         cont.resume(throwing: GitTimeoutError(command: command, timeout: timedOutAfter, kind: timeoutKind))
                         return
                     }
-                    let out = String(decoding: outData, as: UTF8.self)
-                    let err = String(decoding: errData, as: UTF8.self)
                     if process.terminationStatus == 0 || allowNonZero {
-                        cont.resume(returning: out)
+                        cont.resume(returning: outData)
                     } else {
+                        let out = String(decoding: outData, as: UTF8.self)
+                        let err = String(decoding: errData, as: UTF8.self)
                         let raw = err.isEmpty ? out : err
                         cont.resume(throwing: GitError(
                             command: command,

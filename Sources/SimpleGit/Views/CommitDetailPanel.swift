@@ -15,6 +15,7 @@ struct CommitDetailPanel: View {
                 Divider()
                 FileDiffPane(
                     diff: store.fileDiff,
+                    imagePreview: store.fileImagePreview,
                     isLoading: store.isLoadingDiff,
                     hasSelection: store.selectedFilePath != nil
                 )

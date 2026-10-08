@@ -19,6 +19,7 @@ let package = Package(
                 .copy("Resources/claude.png"),
                 .copy("Resources/vscode.png")
             ]
-        )
+        ),
+        .testTarget(name: "SimpleGitTests", dependencies: ["SimpleGit"])
     ]
 )
