@@ -5,6 +5,21 @@ enum GitHubIssueState: String, Hashable {
     case closed = "CLOSED"
 }
 
+enum IssueBoardLabelFilter: String, CaseIterable, Identifiable {
+    case all
+    case bug
+    case feature
+
+    var id: String { rawValue }
+    var title: String { self == .all ? "全部" : rawValue }
+
+    func matches(_ issue: GitHubIssue) -> Bool {
+        self == .all || issue.labels.contains {
+            $0.name.caseInsensitiveCompare(rawValue) == .orderedSame
+        }
+    }
+}
+
 enum IssueBoardStatus: String, CaseIterable, Identifiable {
     case todo
     case inProgress

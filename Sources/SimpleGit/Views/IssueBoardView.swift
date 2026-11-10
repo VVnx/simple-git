@@ -16,16 +16,18 @@ final class IssueBoardModel: ObservableObject {
     @Published private(set) var currentUser: String?
     /// “只看我的”:只展示由当前用户提交的 Issue。
     @Published var showOnlyMine = false
+    @Published var labelFilter: IssueBoardLabelFilter = .all
 
     private var activeRepositoryPath: String?
     private var loadedRepositoryPath: String?
     private var successClearTask: Task<Void, Never>?
 
     func issues(for status: IssueBoardStatus) -> [GitHubIssue] {
-        let visible = showOnlyMine
-            ? issues.filter { $0.author != nil && $0.author == currentUser }
-            : issues
-        return visible.filter { $0.boardStatus == status }
+        issues.filter {
+            $0.boardStatus == status
+                && labelFilter.matches($0)
+                && (!showOnlyMine || ($0.author != nil && $0.author == currentUser))
+        }
     }
 
     func issue(number: Int) -> GitHubIssue? {
