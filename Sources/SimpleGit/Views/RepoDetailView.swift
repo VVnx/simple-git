@@ -111,15 +111,15 @@ struct RepoDetailView: View {
     private var toolbarContent: some ToolbarContent {
         if store.isIssueBoardMode {
             ToolbarItemGroup {
-                Picker("Issue 标签", selection: $issueBoardModel.labelFilter) {
-                    ForEach(IssueBoardLabelFilter.allCases) { filter in
+                Picker("Issue 类型", selection: $issueBoardModel.typeFilter) {
+                    ForEach(IssueBoardTypeFilter.allCases) { filter in
                         Text(filter.title).tag(filter)
                     }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: 200)
-                .help("按 GitHub 标签筛选 Issue，可与“只看我的”同时使用")
+                .help("按 GitHub Type 筛选 Issue，可与“只看我的”同时使用")
 
                 if let currentUser = issueBoardModel.currentUser {
                     Toggle(isOn: $issueBoardModel.showOnlyMine.animation(.easeInOut(duration: 0.15))) {

@@ -16,7 +16,7 @@ final class IssueBoardModel: ObservableObject {
     @Published private(set) var currentUser: String?
     /// “只看我的”:只展示由当前用户提交的 Issue。
     @Published var showOnlyMine = false
-    @Published var labelFilter: IssueBoardLabelFilter = .all
+    @Published var typeFilter: IssueBoardTypeFilter = .all
 
     private var activeRepositoryPath: String?
     private var loadedRepositoryPath: String?
@@ -25,7 +25,7 @@ final class IssueBoardModel: ObservableObject {
     func issues(for status: IssueBoardStatus) -> [GitHubIssue] {
         issues.filter {
             $0.boardStatus == status
-                && labelFilter.matches($0)
+                && typeFilter.matches($0)
                 && (!showOnlyMine || ($0.author != nil && $0.author == currentUser))
         }
     }
@@ -396,11 +396,27 @@ private struct IssueCard: View {
                         }
                     }
 
-                    if !issue.assignees.isEmpty {
-                        Label(issue.assignees.joined(separator: ", "), systemImage: "person.crop.circle")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                    if !issue.assignees.isEmpty || issue.type != nil {
+                        HStack(spacing: 8) {
+                            if !issue.assignees.isEmpty {
+                                Label(issue.assignees.joined(separator: ", "), systemImage: "person.crop.circle")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                            if let type = issue.type {
+                                Text(type.name)
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(type.tint)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(type.tint.opacity(0.12), in: Capsule())
+                                    .lineLimit(1)
+                                    .layoutPriority(1)
+                                    .accessibilityLabel("Type：\(type.name)")
+                            }
+                        }
                     }
                 }
                 .padding(11)
@@ -570,5 +586,21 @@ private extension GitHubIssueLabel {
             green: Double((value >> 8) & 0xff) / 255,
             blue: Double(value & 0xff) / 255
         )
+    }
+}
+
+private extension GitHubIssueType {
+    var tint: Color {
+        switch color?.lowercased() {
+        case "blue": return .blue
+        case "gray": return .gray
+        case "green": return .green
+        case "orange": return .orange
+        case "pink": return .pink
+        case "purple": return .purple
+        case "red": return .red
+        case "yellow": return .yellow
+        default: return .secondary
+        }
     }
 }

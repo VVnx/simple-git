@@ -37,23 +37,41 @@ struct GitHubIssueService {
     }
 
     private func listIssues(state: String, limit: Int) async throws -> [GitHubIssue] {
-        let output = try await GitHubCommandRunner(workingDirectory: repositoryPath).run(
-            [
-                "issue", "list",
-                "--state", state,
-                "--limit", String(limit),
-                "--json", "number,title,state,author,labels,assignees,updatedAt,url"
-            ],
-            timeout: Self.requestTimeout
-        )
+        let runner = GitHubCommandRunner(workingDirectory: repositoryPath)
+        let pageSize = 100
+        var pageNumber = 1
+        var issues: [GitHubIssue] = []
 
+        // gh issue list 的 JSON 字段不含 Type，改读 REST Issue 数据。
+        while issues.count < limit {
+            let output = try await runner.run(
+                [
+                    "api", "--method", "GET", "repos/{owner}/{repo}/issues",
+                    "-f", "state=\(state)",
+                    "-f", "sort=created", "-f", "direction=desc",
+                    "-f", "per_page=\(pageSize)", "-f", "page=\(pageNumber)"
+                ],
+                timeout: Self.requestTimeout
+            )
+            let page = try Self.decodeIssuePage(Data(output.utf8))
+            issues.append(contentsOf: page.issues.prefix(limit - issues.count))
+            if page.itemCount < pageSize { break }
+            pageNumber += 1
+        }
+
+        return issues.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    static func decodeIssuePage(_ data: Data) throws -> (issues: [GitHubIssue], itemCount: Int) {
         do {
-            let payloads = try JSONDecoder().decode([IssuePayload].self, from: Data(output.utf8))
-            return payloads.map { payload in
+            let payloads = try JSONDecoder().decode([IssuePayload].self, from: data)
+            // REST 的 issues 接口同时返回 PR，分页按原始条数推进，看板只保留 Issue。
+            let issues = payloads.filter { $0.pullRequest == nil }.map { payload in
                 GitHubIssue(
                     number: payload.number,
                     title: payload.title,
-                    state: GitHubIssueState(rawValue: payload.state) ?? .open,
+                    state: GitHubIssueState(rawValue: payload.state.uppercased()) ?? .open,
+                    type: payload.type,
                     author: payload.author?.login,
                     labels: payload.labels.map { GitHubIssueLabel(name: $0.name, color: $0.color) },
                     assignees: payload.assignees.map(\.login),
@@ -61,9 +79,9 @@ struct GitHubIssueService {
                     url: payload.url
                 )
             }
-            .sorted { $0.updatedAt > $1.updatedAt }
+            return (issues, payloads.count)
         } catch {
-            throw SimpleGitError("GitHub 返回了无法识别的 Issue 数据,请升级 GitHub CLI 后重试。")
+            throw SimpleGitError("GitHub 返回了无法识别的 Issue 数据,请刷新后重试。")
         }
     }
 
@@ -239,6 +257,7 @@ struct GitHubIssueService {
             number: issue.number,
             title: issue.title,
             state: state,
+            type: issue.type,
             author: issue.author,
             labels: labels,
             assignees: issue.assignees,
@@ -263,12 +282,24 @@ struct GitHubIssueService {
         let number: Int
         let title: String
         let state: String
+        let type: GitHubIssueType?
         let author: AuthorPayload?
         let labels: [LabelPayload]
         let assignees: [AssigneePayload]
         let updatedAt: String
         let url: URL
+        let pullRequest: PullRequestPayload?
+
+        enum CodingKeys: String, CodingKey {
+            case number, title, state, type, labels, assignees
+            case author = "user"
+            case updatedAt = "updated_at"
+            case url = "html_url"
+            case pullRequest = "pull_request"
+        }
     }
+
+    private struct PullRequestPayload: Decodable {}
 
     private struct LabelPayload: Decodable {
         let name: String

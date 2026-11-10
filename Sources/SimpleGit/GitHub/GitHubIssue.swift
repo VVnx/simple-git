@@ -5,7 +5,7 @@ enum GitHubIssueState: String, Hashable {
     case closed = "CLOSED"
 }
 
-enum IssueBoardLabelFilter: String, CaseIterable, Identifiable {
+enum IssueBoardTypeFilter: String, CaseIterable, Identifiable {
     case all
     case bug
     case feature
@@ -14,9 +14,7 @@ enum IssueBoardLabelFilter: String, CaseIterable, Identifiable {
     var title: String { self == .all ? "全部" : rawValue }
 
     func matches(_ issue: GitHubIssue) -> Bool {
-        self == .all || issue.labels.contains {
-            $0.name.caseInsensitiveCompare(rawValue) == .orderedSame
-        }
+        self == .all || issue.type?.name.caseInsensitiveCompare(rawValue) == .orderedSame
     }
 }
 
@@ -50,6 +48,11 @@ enum IssueBoardStatus: String, CaseIterable, Identifiable {
 struct GitHubIssueLabel: Hashable {
     let name: String
     let color: String
+}
+
+struct GitHubIssueType: Decodable, Hashable {
+    let name: String
+    let color: String?
 }
 
 struct GitHubIssueCounts {
@@ -108,6 +111,7 @@ struct GitHubIssue: Identifiable, Hashable {
     let number: Int
     let title: String
     let state: GitHubIssueState
+    let type: GitHubIssueType?
     let author: String?
     let labels: [GitHubIssueLabel]
     let assignees: [String]
