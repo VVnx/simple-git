@@ -356,9 +356,10 @@ private struct IssueCard: View {
                             .help("提出时间：\(RelativeDate.absoluteString(from: issue.createdAt))")
                             .accessibilityLabel("提出于\(RelativeDate.string(from: issue.createdAt))")
                         Spacer()
-                        Text(RelativeDate.string(from: issue.updatedAt))
+                        Text("最近更新：\(RelativeDate.string(from: issue.updatedAt))")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                            .lineLimit(1)
                             .padding(.trailing, 27)
                             .help("更新时间：\(RelativeDate.absoluteString(from: issue.updatedAt))")
                     }
