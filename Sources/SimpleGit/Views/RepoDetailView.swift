@@ -109,8 +109,8 @@ struct RepoDetailView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup {
-            if store.isIssueBoardMode {
+        if store.isIssueBoardMode {
+            ToolbarItemGroup {
                 Picker("Issue 标签", selection: $issueBoardModel.labelFilter) {
                     ForEach(IssueBoardLabelFilter.allCases) { filter in
                         Text(filter.title).tag(filter)
@@ -173,7 +173,9 @@ struct RepoDetailView: View {
                         || store.selectedRepo == nil
                 )
                 .help("在当前 GitHub 仓库创建一个新 Issue")
-            } else {
+            }
+        } else {
+            ToolbarItemGroup {
                 Button {
                     store.fetch()
                 } label: {
@@ -181,6 +183,7 @@ struct RepoDetailView: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 .labelStyle(.titleAndIcon)
+                .buttonStyle(.borderless)
                 .disabled(store.isRepositoryOperationInProgress)
                 .help("git fetch --all --prune --tags:下载远程更新和全量 tag,不改动工作区")
 
@@ -191,6 +194,7 @@ struct RepoDetailView: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 .labelStyle(.titleAndIcon)
+                .buttonStyle(.borderless)
                 .disabled(store.isRepositoryOperationInProgress)
                 .help("git pull:下载并合并到当前分支")
 
@@ -201,6 +205,7 @@ struct RepoDetailView: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 .labelStyle(.titleAndIcon)
+                .buttonStyle(.borderless)
                 .disabled(store.isRepositoryOperationInProgress)
                 .help("git push:推送当前分支(无 upstream 时自动 -u)")
 
@@ -211,12 +216,12 @@ struct RepoDetailView: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 .labelStyle(.titleAndIcon)
+                .buttonStyle(.borderless)
                 .disabled(store.isRepositoryOperationInProgress || store.selectedCommit == nil)
                 .help(store.selectedCommit == nil
                       ? "先在下方点选一个提交,再合并到当前分支"
                       : "把所选提交合并到当前分支(会二次确认)")
             }
-
         }
     }
 }
