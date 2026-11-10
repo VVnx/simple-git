@@ -75,6 +75,7 @@ struct GitHubIssueService {
                     author: payload.author?.login,
                     labels: payload.labels.map { GitHubIssueLabel(name: $0.name, color: $0.color) },
                     assignees: payload.assignees.map(\.login),
+                    createdAt: Self.parseDate(payload.createdAt) ?? .distantPast,
                     updatedAt: Self.parseDate(payload.updatedAt) ?? .distantPast,
                     url: payload.url
                 )
@@ -261,6 +262,7 @@ struct GitHubIssueService {
             author: issue.author,
             labels: labels,
             assignees: issue.assignees,
+            createdAt: issue.createdAt,
             updatedAt: Date(),
             url: issue.url
         )
@@ -286,6 +288,7 @@ struct GitHubIssueService {
         let author: AuthorPayload?
         let labels: [LabelPayload]
         let assignees: [AssigneePayload]
+        let createdAt: String
         let updatedAt: String
         let url: URL
         let pullRequest: PullRequestPayload?
@@ -293,6 +296,7 @@ struct GitHubIssueService {
         enum CodingKeys: String, CodingKey {
             case number, title, state, type, labels, assignees
             case author = "user"
+            case createdAt = "created_at"
             case updatedAt = "updated_at"
             case url = "html_url"
             case pullRequest = "pull_request"

@@ -345,15 +345,22 @@ private struct IssueCard: View {
         ZStack(alignment: .topTrailing) {
             Link(destination: issue.url) {
                 VStack(alignment: .leading, spacing: 9) {
-                    HStack {
+                    HStack(spacing: 6) {
                         Text("#\(issue.number)")
                             .font(.caption.monospacedDigit().weight(.semibold))
                             .foregroundStyle(tint)
+                        Text(RelativeDate.string(from: issue.createdAt))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .help("提出时间：\(RelativeDate.absoluteString(from: issue.createdAt))")
+                            .accessibilityLabel("提出于\(RelativeDate.string(from: issue.createdAt))")
                         Spacer()
                         Text(RelativeDate.string(from: issue.updatedAt))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                             .padding(.trailing, 27)
+                            .help("更新时间：\(RelativeDate.absoluteString(from: issue.updatedAt))")
                     }
 
                     Text(issue.title)

@@ -14,6 +14,7 @@ final class GitHubIssueTests: XCTestCase {
         XCTAssertEqual(issue.author, "alice")
         XCTAssertEqual(issue.assignees, ["bob"])
         XCTAssertEqual(issue.url.absoluteString, "https://github.com/example/repo/issues/1")
+        XCTAssertEqual(issue.createdAt, ISO8601DateFormatter().date(from: "2026-10-20T01:00:00Z"))
         XCTAssertEqual(issue.updatedAt, ISO8601DateFormatter().date(from: "2026-11-10T01:00:00Z"))
         XCTAssertNil(page.issues[2].type)
     }
@@ -35,6 +36,7 @@ final class GitHubIssueTests: XCTestCase {
             "user": { "login": "alice" },
             "labels": [{ "name": "bug", "color": "ff0000" }],
             "assignees": [{ "login": "bob" }],
+            "created_at": "2026-10-20T01:00:00Z",
             "updated_at": "2026-11-10T01:00:00Z",
             "html_url": "https://github.com/example/repo/issues/1"
           },
@@ -43,19 +45,22 @@ final class GitHubIssueTests: XCTestCase {
             "type": { "name": "BUG", "color": "red" },
             "user": null,
             "labels": [{ "name": "feature", "color": "0000ff" }],
-            "assignees": [], "updated_at": "2026-11-10T01:00:00Z",
+            "assignees": [], "created_at": "2026-10-20T01:00:00Z",
+            "updated_at": "2026-11-10T01:00:00Z",
             "html_url": "https://github.com/example/repo/issues/2"
           },
           {
             "number": 3, "title": "未设置类型", "state": "open",
             "type": null, "user": null,
             "labels": [{ "name": "bug", "color": "ff0000" }],
-            "assignees": [], "updated_at": "2026-11-10T01:00:00Z",
+            "assignees": [], "created_at": "2026-10-20T01:00:00Z",
+            "updated_at": "2026-11-10T01:00:00Z",
             "html_url": "https://github.com/example/repo/issues/3"
           },
           {
             "number": 4, "title": "这是 PR", "state": "open",
             "type": null, "user": null, "labels": [], "assignees": [],
+            "created_at": "2026-10-20T01:00:00Z",
             "updated_at": "2026-11-10T01:00:00Z",
             "html_url": "https://github.com/example/repo/pull/4",
             "pull_request": { "url": "https://api.github.com/repos/example/repo/pulls/4" }

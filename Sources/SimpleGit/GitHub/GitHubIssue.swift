@@ -115,6 +115,7 @@ struct GitHubIssue: Identifiable, Hashable {
     let author: String?
     let labels: [GitHubIssueLabel]
     let assignees: [String]
+    let createdAt: Date
     let updatedAt: Date
     let url: URL
 
